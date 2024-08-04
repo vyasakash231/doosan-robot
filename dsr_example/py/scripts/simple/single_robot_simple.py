@@ -13,7 +13,7 @@ sys.path.append( os.path.abspath(os.path.join(os.path.dirname(__file__),"../../.
 
 # for single robot 
 ROBOT_ID     = "dsr01"
-ROBOT_MODEL  = "m1013"
+ROBOT_MODEL  = "a0509"
 import DR_init
 DR_init.__dsr__id = ROBOT_ID
 DR_init.__dsr__model = ROBOT_MODEL
@@ -117,8 +117,8 @@ if __name__ == "__main__":
     set_velx(30,20)  # set global task speed: 30(mm/sec), 20(deg/sec)
     set_accx(60,40)  # set global task accel: 60(mm/sec2), 40(deg/sec2)
 
-    velx=[50, 50]
-    accx=[100, 100]
+    velx=[30, 20]
+    accx=[30, 20]
 
     p1= posj(0,0,0,0,0,0)                    #joint
     p2= posj(0.0, 0.0, 90.0, 0.0, 90.0, 0.0) #joint
@@ -167,12 +167,12 @@ if __name__ == "__main__":
 
     while not rospy.is_shutdown():
         movej(p2, vel=100, acc=100)
-       # movejx(x1, vel=30, acc=60, sol=0)
-        #movel(x2, velx, accx)
+        movejx(x1, vel=30, acc=60, sol=0)
+        movel(x2, velx, accx)
         movej(p1, vel=100, acc=100)
-       # movec(c1, c2, velx, accx)
-       # movesj(qlist, vel=100, acc=100)
-       # movesx(xlist, vel=100, acc=100)
+        movec(c1, c2, velx, accx)
+        movesj(qlist, vel=100, acc=100)
+        movesx(xlist, vel=100, acc=100)
        # move_spiral(rev=9.5,rmax=20.0,lmax=50.0,time=20.0,axis=DR_AXIS_Z,ref=DR_TOOL)
        # move_periodic(amp =[10,0,0,0,30,0], period=1.0, atime=0.2, repeat=5, ref=DR_TOOL)
        # moveb(b_list1, vel=150, acc=250, ref=DR_BASE, mod=DR_MV_MOD_ABS)
