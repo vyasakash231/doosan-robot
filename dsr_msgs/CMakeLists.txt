@@ -45,6 +45,8 @@ add_service_files(
     ./system/ManageAccessControl.srv
     ./system/ReleaseProtectiveStop.srv
     ./system/SetSafetyMode.srv
+    
+    ./system/GetButtonsState.srv
 
     ./motion/MoveJoint.srv
     ./motion/MoveLine.srv

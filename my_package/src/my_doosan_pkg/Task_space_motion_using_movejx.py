@@ -7,8 +7,9 @@ import numpy as np
 import time
 import threading  # Threads are a way to run multiple tasks concurrently within a single process. By using threads, you can perform multiple operations simultaneously, which can be useful for tasks like handling asynchronous events, running background tasks.
 import sys
+import csv
 sys.dont_write_bytecode = True
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),"../../common/imp"))) # get import path : DSR_ROBOT.py 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),"../../../common/imp"))) # get import path : DSR_ROBOT.py 
 
 import DR_init  # at doosan-robot/common/imp/
 DR_init.__dsr__id = "dsr01"
@@ -36,6 +37,13 @@ def call_back_func_1(msg):
 def call_back_func_2(msg):
     pos_list = [round(i,4) for i in list(msg.current_posj)]
     print(pos_list)
+
+def call_back_func_3(msg):
+    pos_list = [round(i,4) for i in list(msg.current_posx)]
+    # print(pos_list)
+    with open("D19.csv", mode="a", newline="") as file:
+        writer = csv.writer(file)
+        writer.writerow(pos_list)
 
 if __name__ == "__main__":
     rospy.init_node('my_node')  # creating a node
@@ -83,8 +91,46 @@ if __name__ == "__main__":
     #my_subscriber_1 = rospy.Subscriber('/dsr01a0509/joint_states', JointState, call_back_func_1)  # In radian
     my_subscriber_2 = rospy.Subscriber('/dsr01a0509/state', RobotState, call_back_func_2)  # In degrees
 
-    p1= posx(367, 37.6, 540.5, 45, 180, 45)  # posx(x, y, z, w, p, r) This function designates the task space in coordinate values.
-    movejx(p1, vel=40, acc=20, sol=2)
+    p0 = posj(0, 10, 110, 0, 60, 0)  # posj(q1, q2, q3, q4, q5, q6) This function designates the joint space angle in degrees
+    movej(p0, vel=40, acc=20)
+
+    p1 = posx(400, 0, 250, 90, -180, 90)  # posx(x, y, z, w, p, r) This function designates the task space in coordinate values.
+    movel(p1, vel=50, acc=40)
+
+    time.sleep(2)
+
+    p2 = posx(500, 0, 250, 90, -180, 90) 
+    movel(p2, vel=50, acc=40)
+
+    time.sleep(2)
+
+    p3 = posx(500, 0, 250, 0, -180, 90) 
+    movel(p3, vel=50, acc=40)
+
+    time.sleep(2)
+
+    p4 = posx(500, 100, 250, 0, -180, 90) 
+    movel(p4, vel=50, acc=20)
+
+    time.sleep(2)
+  
+    p5 = posx(500, 100, 250, -90, -180, 90) 
+    movel(p5, vel=50, acc=40)
+
+    time.sleep(2)
+
+    p6 = posx(400, 100, 250, -90, -180, 90) 
+    movel(p6, vel=50, acc=40)
+
+    time.sleep(2)
+
+    p7 = posx(400, 100, 250, -180, -180, 90) 
+    movel(p7, vel=50, acc=40)
+
+    time.sleep(2)
     
+    p8 = posx(400, 0, 250, -180, -180, 90) 
+    movel(p8, vel=50, acc=20)
+
     rospy.spin()  # To stop the loop and program by pressing ctr + C
         

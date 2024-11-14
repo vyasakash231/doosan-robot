@@ -87,6 +87,7 @@
 #include <dsr_msgs/SetRobotControl.h>
 #include <dsr_msgs/ReleaseProtectiveStop.h>
 #include <dsr_msgs/SetSafetyMode.h>
+#include <dsr_msgs/GetButtonsState.h>  // I added this line
 
 // motion
 #include <dsr_msgs/MoveJoint.h>
@@ -685,6 +686,7 @@ namespace dsr_control{
         bool manage_access_control_cb(dsr_msgs::ManageAccessControl::Request& req, dsr_msgs::ManageAccessControl::Response& res);
         bool release_protective_stop_cb(dsr_msgs::ReleaseProtectiveStop::Request& req, dsr_msgs::ReleaseProtectiveStop::Response& res);
         bool set_safety_mode_cb(dsr_msgs::SetSafetyMode::Request& req, dsr_msgs::SetSafetyMode::Response& res);
+        bool get_buttons_state_cb(dsr_msgs::GetButtonsState::Request& req, dsr_msgs::GetButtonsState::Response& res);  // I added this line
         
         //----- MOTION
         bool movej_cb(dsr_msgs::MoveJoint::Request& req, dsr_msgs::MoveJoint::Response& res);

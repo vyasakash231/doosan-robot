@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<launch>
+    <!-- Start DRCF first -->
+    <node pkg="dsr_launcher" type="start_drcf.sh" name="drcf_starter" output="screen"/>
+    
+    <!-- Wait a bit for DRCF to initialize -->
+    <arg name="gui" default="true"/>
+    <arg name="rviz" default="false"/>
+    
+    <!-- Include the original launch file -->
+    <include file="$(find dsr_launcher)/launch/single_robot_gazebo.launch">
+        <arg name="model" value="a0509"/>
+        <arg name="mode" value="virtual"/>
+        <arg name="host" value="127.0.0.1"/>
+        <arg name="port" value="12345"/>
+        <arg name="gui" value="$(arg gui)"/>
+        <arg name="rviz" value="$(arg rviz)"/>
+    </include>
+</launch>
+

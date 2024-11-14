@@ -2,7 +2,7 @@
 
 <launch>
   <arg name="ns" default="dsr01"/>
-  <arg name="host" default="192.168.137.100"/>
+  <arg name="host" default="127.0.0.1"/>
 	<arg name="port" default="12345"/>
   <arg name="mode" default="virtual"/>
   <arg name="model" default="a0509"/>
@@ -22,9 +22,9 @@
   <arg name="controller" default="position"/>
 
   <!-- doosan robot & mobile-robot PID configurations from YAML file to parameter server -->
-  <!-- <group ns="$(arg ns)">
+  <!-- group ns="$(arg ns)">
     <rosparam file="$(find dsr_gazebo)/config/gazebo_ros_control_params.yaml" command="load"/>
-  </group> -->
+  </group -->
 
   <group if="$(eval arg('gripper') == 'none')">
     <arg name="yaml"          default="dsr_control"/>

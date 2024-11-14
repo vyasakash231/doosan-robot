@@ -489,6 +489,7 @@ namespace dsr_control{
             if (g_bHasControlAuthority){
                 Drfl.set_robot_control(CONTROL_SERVO_ON);
 				Drfl.set_robot_mode(ROBOT_MODE_MANUAL);   //Idle Servo Off 후 servo on 하는 상황 발생 시 set_robot_mode 명령을 전송해 manual 로 전환. add 2020/04/28
+				//Drfl.set_robot_mode(ROBOT_MODE_BACKDRIVE);  // Add the command to switch to backdrive mode
             }
             break;
         case STATE_SAFE_STOP2:
@@ -919,6 +920,7 @@ namespace dsr_control{
         m_nh_system[13]= private_nh_.advertiseService("system/manage_access_control", &DRHWInterface::manage_access_control_cb, this);
         m_nh_system[14]= private_nh_.advertiseService("system/release_protective_stop", &DRHWInterface::release_protective_stop_cb, this);
         m_nh_system[15]= private_nh_.advertiseService("system/set_safety_mode", &DRHWInterface::set_safety_mode_cb, this);
+        m_nh_system[16]= private_nh_.advertiseService("system/get_buttons_state", &DRHWInterface::get_buttons_state_cb, this);  // I added this part
         
         //  motion Operations
         m_nh_motion_service[0] = private_nh_.advertiseService("motion/move_joint", &DRHWInterface::movej_cb, this);
@@ -2203,6 +2205,14 @@ namespace dsr_control{
         res.success = true;
         return true;
     }
+    // ---------------------------------------------- I added this part --------------------------------------------
+    bool DRHWInterface::get_buttons_state_cb(dsr_msgs::GetButtonsState::Request& req, dsr_msgs::GetButtonsState::Response& res)                 
+    {
+        for(int idx = 0; idx < NUM_BUTTON; idx++)
+            res.state[idx] = g_stDrState.nActualBT[idx] > 0 ? true : false;      
+        return true;
+    }
+    // ---------------------------------------------- I added this part --------------------------------------------
     bool DRHWInterface::get_solution_space_cb(dsr_msgs::GetSolutionSpace::Request& req, dsr_msgs::GetSolutionSpace::Response& res)
     {
         res.success = false;

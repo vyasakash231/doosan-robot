@@ -8,7 +8,7 @@ import time
 import threading  # Threads are a way to run multiple tasks concurrently within a single process. By using threads, you can perform multiple operations simultaneously, which can be useful for tasks like handling asynchronous events, running background tasks.
 import sys
 sys.dont_write_bytecode = True
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),"../../common/imp"))) # get import path : DSR_ROBOT.py 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),"../../../common/imp"))) # get import path : DSR_ROBOT.py 
 
 import DR_init  # at doosan-robot/common/imp/
 DR_init.__dsr__id = "dsr01"
@@ -17,12 +17,8 @@ DR_init.__dsr__model = "a0509"
 from DSR_ROBOT import *  # at doosan-robot/common/imp/
 from DR_common import *  # at doosan-robot/common/imp/
 
-import pyrealsense2 as rs
-import cv2 as cv
-from cv2 import aruco
-
 # Importing messages and services 
-from dsr_msgs.msg import RobotStop, RobotState  # at doosan-robot/dsr_msgs/msg/
+from dsr_msgs.msg import RobotStop, RobotState, RobotStateRT  # at doosan-robot/dsr_msgs/msg/
 from dsr_msgs.srv import *
 from sensor_msgs.msg import JointState
 from tf2_msgs.msg import TFMessage
@@ -30,7 +26,7 @@ from tf2_msgs.msg import TFMessage
 from scipy.spatial.transform import Rotation
 
 
-def call_back_func(msg):
+def call_back_func_3(msg):
     T_matrix = np.zeros((6,4,4))
     # Process the TF messages
     i = 0
@@ -59,21 +55,30 @@ def shutdown():
 
     # '/my_node' is publishing data using publisher named 'my_publisher' to the topic '/dsr01a0509/stop'
     my_publisher.publish(stop_mode=STOP_TYPE_QUICK)
+
+    # this will stop teaching mode
+    set_robot_mode_proxy(ROBOT_MODE_AUTONOMOUS)
+
     return 
 
 def call_back_func_1(msg):
+    response = check_button()  # Call the service, no request data needed
+    print(response.state)
     pos_list = [round(i,4) for i in list(msg.position)]
-    # print(f"Joint_angles in radian: {pos_list}")
+    #print(f"Joint_angles in radian: {pos_list}")
 
 def call_back_func_2(msg):
     pos_list = [round(i,4) for i in list(msg.current_posj)]
-    print(f"Joint_angles degrees: {pos_list}")
+    # print(f"Joint_angles degrees: {pos_list}")
 
 if __name__ == "__main__":
     rospy.init_node('my_node')  # creating a node
     rospy.on_shutdown(shutdown)  # A function named 'shutdown' to be called when the node is shutdown.
 
-    rospy.wait_for_service('/dsr01a0509/system/set_robot_mode')  # Wait until the service becomes available
+    # Wait until the service becomes available
+    rospy.wait_for_service('/dsr01a0509/system/get_buttons_state')  # Wait for the service to be available
+    rospy.wait_for_service('/dsr01a0509/system/set_robot_mode') 
+
     """
     This line creates a service proxy named set_robot_mode_proxy for calling the service /dsr01a0509/system/set_robot_mode. 
     SetRobotMode is the service type. This service is used to set the mode of the robot system, such as changing between 
@@ -93,6 +98,7 @@ if __name__ == "__main__":
     # 0 : ROBOT_MODE_MANUAL  (robot LED lights up blue) --> use it for recording demonstration
     # 1 : ROBOT_MODE_AUTONOMOUS  (robot LED lights up in white)
     # 2 : ROBOT_MODE_MEASURE
+    # 3 : ROBOT_MODE_BACKDRIVE
     # drfl.SetRobotMode()
     #________________________________
     int8 robot_mode # <Robot_Mode>
@@ -101,6 +107,9 @@ if __name__ == "__main__":
     """
     set_robot_mode_proxy  = rospy.ServiceProxy('/dsr01a0509/system/set_robot_mode', SetRobotMode)
     set_robot_mode_proxy(ROBOT_MODE_MANUAL)  # Calls the service proxy and pass the args:robot_mode, to set the robot mode to ROBOT_MODE_MANUAL.
+
+
+    check_button = rospy.ServiceProxy('/dsr01a0509/system/get_buttons_state', GetButtonsState)
 
     # Creates a publisher on the topic '/dsr01a0509/stop' to publish RobotStop messages with a queue size of 10.         
     my_publisher = rospy.Publisher('/dsr01a0509/stop', RobotStop, queue_size=10)  
@@ -111,9 +120,11 @@ if __name__ == "__main__":
     (1) /dsr01a0509/joint_states  -->  gives joint angles as position in radian
     (2) /dsr01a0509/state  -->  gives complete info of robot and joint angle as current_posj in degree
     """ 
-    my_subscriber_1 = rospy.Subscriber('/dsr01a0509/joint_states', JointState, call_back_func_1)  # In radian
-    my_subscriber_2 = rospy.Subscriber('/dsr01a0509/state', RobotState, call_back_func_2)  # In degrees
+    # my_subscriber_1 = rospy.Subscriber('/dsr01a0509/joint_states', JointState, call_back_func_1)  # In radian
+    # my_subscriber_2 = rospy.Subscriber('/dsr01a0509/state', RobotState, call_back_func_2)  # In degrees
 
-    my_subscriber = rospy.Subscriber('/tf', TFMessage, call_back_func)  # In degrees
+    # my_subscriber_3 = rospy.Subscriber('/tf', TFMessage, call_back_func_3)  # In degrees
+
+    rospy.loginfo("Robot setup complete - Ready for manual demonstration")
 
     rospy.spin()  # To stop the loop and program by pressing ctr + C    

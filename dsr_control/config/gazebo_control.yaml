@@ -1,0 +1,9 @@
+dsr01:  # This should match your namespace + model
+  gazebo_ros_control:
+    pid_gains:
+      joint1: {p: 75.0, i: 0.01, d: 5.0}   # Reduced from 500/100/200
+      joint2: {p: 75.0, i: 0.01, d: 5.0}   # Reduced from 500/100/250
+      joint3: {p: 75.0, i: 0.01, d: 5.0}   # Reduced from 300/20/40
+      joint4: {p: 75.0, i: 0.01, d: 5.0}   # Reduced from 100/0/40
+      joint5: {p: 75.0, i: 0.01, d: 5.0}   # Reduced from 200/20/25
+      joint6: {p: 75.0, i: 0.01, d: 5.0}   # Reduced from 300/20/25

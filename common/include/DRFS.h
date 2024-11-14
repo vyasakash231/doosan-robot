@@ -779,7 +779,7 @@ typedef struct _RT_OUTPUT_DATA_LIST
     float                       goal_joint_position[NUMBER_OF_JOINT];
     /* final goal tcp position (reserved) */
     float                       goal_tcp_position[NUMBER_OF_TASK];
-    /* ROBOT_MODE_MANUAL(0), ROBOT_MODE_AUTONOMOUS(1), ROBOT_MODE_MEASURE(2) */
+    /* ROBOT_MODE_MANUAL(0), ROBOT_MODE_AUTONOMOUS(1), ROBOT_MODE_MEASURE(2), ROBOT_MODE_MEASURE(3) */
     unsigned char               robot_mode;
     /* STATE_INITIALIZING(0), STATE_STANDBY(1), STATE_MOVING(2), STATE_SAFE_OFF(3), STATE_TEACHING(4), STATE_SAFE_STOP(5), STATE_EMERGENCY_STOP, STATE_HOMMING, STATE_RECOVERY, STATE_SAFE_STOP2, STATE_SAFE_OFF2, */
     unsigned char               robot_state;

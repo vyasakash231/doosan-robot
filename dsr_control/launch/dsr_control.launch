@@ -5,7 +5,7 @@
 	<arg name="host" default="127.0.0.1"/>
 	<arg name="port" default="12345"/>
 	<arg name="mode" default="virtual"/>
-	<arg name="model" default="m1013"/>
+	<arg name="model" default="a0509"/>
 	<arg name="color" default="color"/>
     <arg name="gripper" default="none"/>
 	<arg name="mobile" default="none"/>
@@ -26,6 +26,7 @@
 
 	<!-- 제어기를 위한 position_controller, joint_state 정의 -->
 	<rosparam command="load" file="$(find dsr_control)/config/$(arg yaml).yaml" ns="$(arg ns)$(arg model)" />
+	<rosparam command="load" file="$(find dsr_control)/config/gazebo_control.yaml"/>
     <node name="controller_spawner" pkg="controller_manager" type="spawner" output="screen"
 				args="dsr_joint_$(arg controller)_controller dsr_joint_publisher" ns="$(arg ns)$(arg model)">
 	</node>

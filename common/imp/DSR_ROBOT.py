@@ -53,7 +53,7 @@ _ros_set_robot_mode             = rospy.ServiceProxy(_srv_name_prefix +"/system/
 _ros_get_robot_mode             = rospy.ServiceProxy(_srv_name_prefix +"/system/get_robot_mode", GetRobotMode)
 _ros_set_robot_system           = rospy.ServiceProxy(_srv_name_prefix +"/system/set_robot_system", SetRobotSystem)
 _ros_get_robot_system           = rospy.ServiceProxy(_srv_name_prefix +"/system/get_robot_system", GetRobotSystem)
-_ros_get_robot_state            = rospy.ServiceProxy(_srv_name_prefix +"/system/get_robot_state", GetRobotState)
+_ros_get_robot_state            = rospy.ServiceProxy(_srv_name_prefix +"/system/get_robot_state", GetRobotState)  # this is telling me the state of robot teaching or standby
 _ros_set_robot_speed_mode       = rospy.ServiceProxy(_srv_name_prefix +"/system/set_robot_speed_mode", SetRobotSpeedMode)
 _ros_get_robot_speed_mode       = rospy.ServiceProxy(_srv_name_prefix +"/system/get_robot_speed_mode", GetRobotSpeedMode)
 _ros_set_safe_stop_reset_type   = rospy.ServiceProxy(_srv_name_prefix +"/system/set_safe_stop_reset_type", SetSafeStopResetType)
@@ -5319,12 +5319,15 @@ class CDsrRobot:
     
         #print_result("{0} = set_ref_coord(coord:{1})".format(ret, coord))
         return ret
+    
     def movej(self, pos, vel=None, acc=None, time=None, radius=None, mod= DR_MV_MOD_ABS, ra=DR_MV_RA_DUPLICATE, v=None, a=None, t=None, r=None):
         ret = self._movej(pos, vel, acc, time, radius, mod, ra, v, a, t, r, _async=0)
         return ret
+    
     def amovej(self, pos, vel=None, acc=None, time=None, radius=None, mod= DR_MV_MOD_ABS, ra=DR_MV_RA_DUPLICATE, v=None, a=None, t=None, r=None):
         ret = self._movej(pos, vel, acc, time, radius, mod, ra, v, a, t, r, _async=1)
         return ret
+    
     def _movej(self, pos, vel=None, acc=None, time=None, radius=None, mod= DR_MV_MOD_ABS, ra=DR_MV_RA_DUPLICATE, v=None, a=None, t=None, r=None, _async=0):
         # _pos
         _pos = get_posj(pos)
