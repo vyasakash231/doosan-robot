@@ -153,7 +153,6 @@ class Torque_Control():
         self.initialize_rt_service_proxies()
         
         self.my_publisher = rospy.Publisher('/dsr01a0509/stop', RobotStop, queue_size=10)
-        rospy.Subscriber('/dsr01a0509/state', RobotState, self.call_back_func)
 
         self.speedj_publisher = rospy.Publisher('/dsr01a0509/speedj_rt_stream', SpeedJRTStream, queue_size=10)        
         self.speedl_publisher = rospy.Publisher('/dsr01a0509/servol_rt_stream', ServoLRTStream, queue_size=10)         
@@ -301,22 +300,23 @@ class Torque_Control():
                 self._plot_data(response.data)
 
                 with mtx:
-                    self.Robot_RT_State.time_stamp = response.data.time_stamp
-                    for i in range(6):
-                        self.Robot_RT_State.actual_joint_position[i] = response.data.actual_joint_position[i]
-                        self.Robot_RT_State.actual_joint_position_abs[i] = response.data.actual_joint_position_abs[i]  # use this for joint angle
-                        self.Robot_RT_State.actual_joint_velocity[i] = response.data.actual_joint_velocity[i]
-                        self.Robot_RT_State.actual_tcp_position[i] = response.data.actual_tcp_position[i]
-                        self.Robot_RT_State.actual_tcp_velocity[i] = response.data.actual_tcp_velocity[i]
-                        self.Robot_RT_State.gravity_torque[i] = response.data.gravity_torque[i]
-                        self.Robot_RT_State.actual_motor_torque[i] = response.data.actual_motor_torque[i]  # actual motor torque applying gear ratio = gear_ratio * current2torque_constant * motor current [Nm]
-                        self.Robot_RT_State.raw_force_torque[i] = response.data.raw_force_torque[i]  # raw force torque sensor data w.r.t. flange coordinates [N, Nm]
+                    # self.Robot_RT_State.time_stamp = response.data.time_stamp
+                    # for i in range(6):
+                    #     self.Robot_RT_State.actual_joint_position[i] = response.data.actual_joint_position[i]
+                    #     self.Robot_RT_State.actual_joint_position_abs[i] = response.data.actual_joint_position_abs[i]  # use this for joint angle
+                    #     self.Robot_RT_State.actual_joint_velocity[i] = response.data.actual_joint_velocity[i]
+                    #     self.Robot_RT_State.actual_tcp_position[i] = response.data.actual_tcp_position[i]
+                    #     self.Robot_RT_State.actual_tcp_velocity[i] = response.data.actual_tcp_velocity[i]
+                    #     self.Robot_RT_State.gravity_torque[i] = response.data.gravity_torque[i]
+                    #     self.Robot_RT_State.actual_motor_torque[i] = response.data.actual_motor_torque[i]  # actual motor torque applying gear ratio = gear_ratio * current2torque_constant * motor current [Nm]
+                    #     self.Robot_RT_State.raw_force_torque[i] = response.data.raw_force_torque[i]  # raw force torque sensor data w.r.t. flange coordinates [N, Nm]
 
-                        for j in range(6):
-                            self.Robot_RT_State.coriolis_matrix[i][j] = response.data.coriolis_matrix[i].data[j]
-                            self.Robot_RT_State.mass_matrix[i][j] = response.data.mass_matrix[i].data[j]
-                            self.Robot_RT_State.jacobian_matrix[i][j] = response.data.jacobian_matrix[i].data[j]
-
+                    #     for j in range(6):
+                    #         self.Robot_RT_State.coriolis_matrix[i][j] = response.data.coriolis_matrix[i].data[j]
+                    #         self.Robot_RT_State.mass_matrix[i][j] = response.data.mass_matrix[i].data[j]
+                    #         self.Robot_RT_State.jacobian_matrix[i][j] = response.data.jacobian_matrix[i].data[j]
+                    self.Robot_RT_State.store_data(response.data)
+                    
             except (rospy.ServiceException, rospy.ROSException) as e:
                 if not self.shutdown_flag:  # Only log if we're not shutting down
                     rospy.logwarn(f"Service call failed: {e}") 
@@ -328,11 +328,6 @@ class Torque_Control():
             self.plotter.update_data(data.actual_motor_torque, data.external_tcp_force)
         except Exception as e:
             rospy.logwarn(f"Error adding plot data: {e}")
-
-    def call_back_func(self, msg):
-        self.current_Px = 0.001*msg.current_posx[0]
-        self.current_Py = 0.001*msg.current_posx[1]
-        self.current_Pz = 0.001*msg.current_posx[2]
 
     def gravity_compensation(self):
         """Implements torque control with gravity compensation"""
