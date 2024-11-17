@@ -1,4 +1,3 @@
-
 dsr_joint_position_controller:
   type: position_controllers/JointGroupPositionController
   joints:

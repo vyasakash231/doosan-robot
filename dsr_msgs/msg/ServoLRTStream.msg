@@ -3,7 +3,7 @@
 # 
 #____________________________________________________________________________________________
 
-float64[6] pos               # position  
-float64[6] vel               # velocity
-float64[6] acc               # acceleration
+float64[6] pos               # EE position  
+float64[6] vel               # EE velocity
+float64[6] acc               # EE acceleration
 float64    time              # time

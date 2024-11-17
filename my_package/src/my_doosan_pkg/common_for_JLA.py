@@ -79,7 +79,7 @@ def jacobian_matrix(n,alpha,a,d,theta,le=0):
         Jw[:,i] = np.reshape(Z_i_0,(3,)) # conver 2D of shape (3,1) to 1D of shape (3,)
 
     J = np.concatenate((Jz,Jw),axis=0)
-    return Jz
+    return np.round(J, 3)
 
 '''%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%'''
 

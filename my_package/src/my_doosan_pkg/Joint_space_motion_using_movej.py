@@ -85,12 +85,10 @@ if __name__ == "__main__":
     (2) /dsr01a0509/state  -->  gives complete info of robot and joint angle as current_posj in degree
     # """ 
     #my_subscriber_1 = rospy.Subscriber('/dsr01a0509/joint_states', JointState, call_back_func_1)  # In radian
-    my_subscriber_2 = rospy.Subscriber('/dsr01a0509/state', RobotState, call_back_func_2)  # In degrees
+    my_subscriber_2 = rospy.Subscriber('/dsr01a0509/state', RobotState, call_back_func_3)  # In degrees
 
-    p1= posj(0,20,110,0,50,0)  # posj(q1, q2, q3, q4, q5, q6) This function designates the joint space angle in degrees
-    movej(p1, vel=40, acc=20)
-
-    p1= posj(0,10,110,0,60,0)  # posj(q1, q2, q3, q4, q5, q6) This function designates the joint space angle in degrees
+    # EE Pose: [437.6643, -1.6874, 431.2248, 90.3818, 179.9681, 90.6326]
+    p1= posj(0,0,90,0,90,0)  # posj(q1, q2, q3, q4, q5, q6) This function designates the joint space angle in degrees
     movej(p1, vel=40, acc=20)
     
     rospy.spin()  # To stop the loop and program by pressing ctr + C

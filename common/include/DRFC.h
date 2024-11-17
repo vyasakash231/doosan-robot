@@ -308,7 +308,7 @@ typedef enum {
 
 typedef enum {
     CONTROL_MODE_POSITION = 3,
-    CONTROL_MODE_TORQUE
+    CONTROL_MODE_TORQUE = 4,
 } CONTROL_MODE;
 
 typedef enum {
