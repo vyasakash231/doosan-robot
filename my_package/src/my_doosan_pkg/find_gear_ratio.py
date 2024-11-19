@@ -8,19 +8,11 @@ from threading import Lock, Thread
 import numpy as np
 np.set_printoptions(suppress=True)
 
-import matplotlib
-matplotlib.use('TkAgg')  # Must be before importing pyplot
-import matplotlib.pyplot as plt
-from matplotlib.animation import FuncAnimation
-from collections import deque
-from queue import Queue, Empty
-
 sys.dont_write_bytecode = True
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),"../../../common/imp")))
 
 from common_for_JLA import *
 from robot_RT_state import RT_STATE
-from plot import RealTimePlot
 
 import DR_init
 DR_init.__dsr__id = "dsr01"
@@ -36,22 +28,11 @@ from sensor_msgs.msg import JointState
 mtx = Lock()
 
 
-class Torque_Control():
-    n = 6  # No of joints
-
-    # DH Parameters
-    alpha = np.array([0, -pi/2, 0, pi/2, -pi/2, pi/2])   
-    a = np.array([0, 0, 0.409, 0, 0, 0])
-    d = np.array([0.1555, 0, 0, 0.367, 0, 0.127])
-    le = 0
-
+class Gear_Ratio:
     def __init__(self):
         self.is_rt_connected = False
         self.shutdown_flag = False  # Add flag to track shutdown state
         self.Robot_RT_State = RT_STATE()
-
-        # Initialize the plotter in the main thread
-        self.plotter = RealTimePlot()
 
         # Initialize RT control services
         self.initialize_rt_service_proxies()
@@ -196,9 +177,6 @@ class Torque_Control():
                 request = ReadDataRTRequest()
                 response = self.RT_observer_client(request)
 
-                # Plot Torque
-                self._plot_data(response.data)
-
                 with mtx:
                     self.Robot_RT_State.store_data(response.data)
                     
@@ -207,70 +185,73 @@ class Torque_Control():
                     rospy.logwarn(f"Service call failed: {e}") 
             rate.sleep()
 
-    def _plot_data(self, data):
-        """Thread-safe plotting function"""
-        try:
-            self.plotter.update_data(data.actual_motor_torque, data.external_tcp_force)
-        except Exception as e:
-            rospy.logwarn(f"Error adding plot data: {e}")
+    def get_single_joint_torque(self, joint_idx, amplitude=1.0, frequency=0.5):
+        """
+        Generate sinusoidal torque for a single joint while keeping others at 0
+        joint_idx: Joint to test (0-5)
+        amplitude: Torque amplitude in Nm
+        frequency: Frequency of oscillation in Hz
+        """
+        torque = np.zeros(6)
+        t = (rospy.Time.now() - self.start_time).to_sec()
+        torque[joint_idx] = amplitude * np.sin(2 * np.pi * frequency * t)
+        return torque
 
-    def gravity_compensation(self):
-        """Implements torque control with gravity compensation"""
+    def torque_control(self):
+        """Implements torque control and collects gear ratio data"""
         rate = rospy.Rate(1000)
         
+        # Initialize arrays to store data
+        data_points = 1000  # Number of samples per joint
+        gear_ratios = np.zeros((6, data_points))  # Store ratios for each joint
+        current_joint = 0  # Start with first joint
+        sample_count = 0
+        
+        self.start_time = rospy.Time.now()
+        
         try:
-            start_time = rospy.Time.now()
             while not rospy.is_shutdown() and not self.shutdown_flag:
                 with mtx:
-                    G_torques = self.Robot_RT_State.gravity_torque
-                    t = (rospy.Time.now() - start_time).to_sec()
+                    # Generate torque command for current joint
+                    torque = self.get_single_joint_torque(current_joint, amplitude=7.0)
                     
+                    # Create and send torque command
                     writedata = TorqueRTStream()
-                    writedata.tor = G_torques
+                    writedata.tor = torque.tolist()  # Convert numpy array to list
                     writedata.time = 0.001
-                    
                     self.torque_publisher.publish(writedata)
-                rate.sleep()
-        except rospy.ROSInterruptException:
-            pass
-        finally:
-            self.cleanup()
-
-    def impedence_control_static(self, Kd, Dd, Md, Xd, Xd_dot):
-        """Implements torque control with gravity compensation"""
-        rate = rospy.Rate(1000)
-        
-        try:
-            start_time = rospy.Time.now()
-            while not rospy.is_shutdown() and not self.shutdown_flag:
-                with mtx:
-                    G_torque = self.Robot_RT_State.gravity_torque
-                    C_matrix = self.Robot_RT_State.coriolis_matrix
-                    M_matrix = self.Robot_RT_State.mass_matrix
-
-                    q_dot = self.Robot_RT_State.actual_joint_velocity_abs
-                    Xe = self.Robot_RT_State.actual_tcp_position     #  (x, y, z, a, b, c), where (a, b, c) follows Euler ZYZ notation [mm, deg]
-                    Xe_dot = self.Robot_RT_State.actual_tcp_velocity  # w.r.t. base coordinates in [mm, deg/s]
-                    J = self.Robot_RT_State.jacobian_matrix
-
-                    C_torque = (C_matrix @ q_dot[:, np.newaxis]).reshape(-1)
-
-                    # task space error
-                    E = Xe - Xd
-                    E_dot = Xe_dot - Xd_dot
-
-                    # Classical Impedance Controller WITHOUT contact force feedback!!
-                    impedence_force = Kd @ E[:, np.newaxis] + Dd @ E_dot[:, np.newaxis]  # make E, E_dot column vector from row vector
-                    impedence_tau = (J.T @ impedence_force).reshape(-1)
-
-                    torques = C_torque.tolist() + G_torque - impedence_tau.tolist()    # Cartesian PD control with gravity cancellation
                     
-                    writedata = TorqueRTStream()
-                    writedata.tor = G_torque
-                    writedata.time = 0.01
+                    # Calculate and store gear ratio
+                    # Avoid division by zero
+                    motor_torques = np.array(self.Robot_RT_State.actual_motor_torque)
+                    joint_torques = np.array(self.Robot_RT_State.actual_joint_torque)
                     
-                    self.torque_publisher.publish(writedata)
-                rate.sleep() 
+                    # Only calculate ratio when motor torque is significant
+                    if abs(motor_torques[current_joint]) > 0.01:
+                        gear_ratios[current_joint, sample_count] = joint_torques[current_joint] / motor_torques[current_joint]
+                        sample_count += 1
+                    
+                    # Move to next joint after collecting enough samples
+                    if sample_count >= data_points:
+                        # Calculate average gear ratio for current joint
+                        avg_ratio = np.median(gear_ratios[current_joint, :])
+                        rospy.loginfo(f"Joint {current_joint} estimated gear ratio: {avg_ratio:.2f}")
+                        
+                        # Move to next joint
+                        current_joint += 1
+                        sample_count = 0
+                        
+                        # Exit if we've tested all joints
+                        if current_joint >= 6:
+                            break          
+                    rate.sleep()
+                    
+            # Print final results
+            final_ratios = np.median(gear_ratios, axis=1)
+            rospy.loginfo("Final estimated gear ratios:")
+            for joint, ratio in enumerate(final_ratios):
+                rospy.loginfo(f"Joint {joint}: {ratio:.2f}")
+                
         except rospy.ROSInterruptException:
             pass
         finally:
@@ -279,36 +260,16 @@ class Torque_Control():
 if __name__ == "__main__":
     try:
         # Initialize ROS node first
-        rospy.init_node('My_service_node')
+        rospy.init_node('my_node')
         
         # Create control object
-        task = Torque_Control()
+        task = Gear_Ratio()
         rospy.sleep(1)  # Give time for initialization
-
-        Kd = np.diag([2.0, 2.0, 2.0, 1.0, 1.0, 1.0])
-        Dd = np.diag([0.5, 0.5, 0.5, 0.25, 0.25, 0.25])
-        Md = np.diag([0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
-
-        x1, sol = get_current_posx()   #  x1 w.r.t. DR_BASE
-        Xd = np.array(x1)  # [mm, deg]
-        Xd_dot = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])  # [mm/s, deg/s]
         
         # Start impedance control in a separate thread
-        control_thread = Thread(target=lambda: task.impedence_control_static(Kd, Dd, Md, Xd, Xd_dot))
+        control_thread = Thread(target=lambda: task.torque_control())
         control_thread.daemon = True
         control_thread.start()
-
-        # print(np.round(task.Robot_RT_State.jacobian_matrix, 3), '\n')
-        # theta = task.Robot_RT_State.actual_joint_position_abs
-        # print("=============================================")
-        # J = jacobian_matrix(task.n, task.alpha, task.a, task.d, np.radians(theta))
-        # print(J)
-        
-        # Keep the main thread running for the plot
-        while not rospy.is_shutdown():
-            plt.pause(0.1)  # This keeps the plot window responsive
             
     except rospy.ROSInterruptException:
         pass
-    finally:
-        plt.close('all')  # Clean up plots on exit
