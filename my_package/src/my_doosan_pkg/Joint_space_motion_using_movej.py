@@ -31,15 +31,15 @@ def shutdown():
 
 def call_back_func_1(msg):
     pos_list = [round(i,4) for i in list(msg.position)]
-    print(f"Joint_angles: {pos_list}")
+    # print(f"Joint_angles: {pos_list}")
 
 def call_back_func_2(msg):
     pos_list = [round(i,4) for i in list(msg.current_posj)]
-    print(f"Joint_angles: {pos_list}")
+    # print(f"Joint_angles: {pos_list}")
 
 def call_back_func_3(msg):
     posx_list = [round(i,4) for i in list(msg.current_posx)]
-    print(f"EE Pose: {posx_list}")
+    # print(f"EE Pose: {posx_list}")
 
 if __name__ == "__main__":
     rospy.init_node('my_node')  # creating a node
@@ -87,8 +87,10 @@ if __name__ == "__main__":
     #my_subscriber_1 = rospy.Subscriber('/dsr01a0509/joint_states', JointState, call_back_func_1)  # In radian
     my_subscriber_2 = rospy.Subscriber('/dsr01a0509/state', RobotState, call_back_func_3)  # In degrees
 
-    # EE Pose: [437.6643, -1.6874, 431.2248, 90.3818, 179.9681, 90.6326]
-    p1= posj(0,0,90,0,90,0)  # posj(q1, q2, q3, q4, q5, q6) This function designates the joint space angle in degrees
+    # p1= posj(0,0,90,0,90,0)  # posj(q1, q2, q3, q4, q5, q6) This function designates the joint space angle in degrees
+    # movej(p1, vel=40, acc=20)
+
+    p1= posj(0,0,0,0,0,0)  # posj(q1, q2, q3, q4, q5, q6) This function designates the joint space angle in degrees
     movej(p1, vel=40, acc=20)
     
     rospy.spin()  # To stop the loop and program by pressing ctr + C

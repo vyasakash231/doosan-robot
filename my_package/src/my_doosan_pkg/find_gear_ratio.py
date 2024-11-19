@@ -8,6 +8,13 @@ from threading import Lock, Thread
 import numpy as np
 np.set_printoptions(suppress=True)
 
+import matplotlib
+matplotlib.use('TkAgg')  # Must be before importing pyplot
+import matplotlib.pyplot as plt
+from matplotlib.animation import FuncAnimation
+from collections import deque
+from queue import Queue, Empty
+
 sys.dont_write_bytecode = True
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),"../../../common/imp")))
 
@@ -39,8 +46,8 @@ class Gear_Ratio:
         
         self.my_publisher = rospy.Publisher('/dsr01a0509/stop', RobotStop, queue_size=10)
 
-        self.speedj_publisher = rospy.Publisher('/dsr01a0509/speedj_rt_stream', SpeedJRTStream, queue_size=10)        
-        self.speedl_publisher = rospy.Publisher('/dsr01a0509/servol_rt_stream', ServoLRTStream, queue_size=10)         
+        self.joint_publisher = rospy.Publisher('/dsr01a0509/speedj_rt_stream', SpeedJRTStream, queue_size=10)        
+        self.task_publisher = rospy.Publisher('/dsr01a0509/servol_rt_stream', ServoLRTStream, queue_size=10)         
         self.torque_publisher = rospy.Publisher('/dsr01a0509/torque_rt_stream', TorqueRTStream, queue_size=10)
 
         self.RT_observer_client = rospy.ServiceProxy('/dsr01a0509/realtime/read_data_rt', ReadDataRT)
@@ -193,33 +200,33 @@ class Gear_Ratio:
         frequency: Frequency of oscillation in Hz
         """
         torque = np.zeros(6)
-        t = (rospy.Time.now() - self.start_time).to_sec()
-        torque[joint_idx] = amplitude * np.sin(2 * np.pi * frequency * t)
+        torque[joint_idx] = amplitude
         return torque
 
-    def torque_control(self):
+    def calculate_gear_ratio(self):
         """Implements torque control and collects gear ratio data"""
-        rate = rospy.Rate(1000)
+        rate = rospy.Rate(100)
         
         # Initialize arrays to store data
-        data_points = 1000  # Number of samples per joint
+        data_points = 2500  # Number of samples per joint
         gear_ratios = np.zeros((6, data_points))  # Store ratios for each joint
         current_joint = 0  # Start with first joint
         sample_count = 0
         
         self.start_time = rospy.Time.now()
+        mag = np.linspace(-pi/2, pi/2, data_points)
         
         try:
             while not rospy.is_shutdown() and not self.shutdown_flag:
                 with mtx:
                     # Generate torque command for current joint
-                    torque = self.get_single_joint_torque(current_joint, amplitude=7.0)
+                    torque = self.get_single_joint_torque(current_joint, amplitude=mag[sample_count])
                     
                     # Create and send torque command
-                    writedata = TorqueRTStream()
-                    writedata.tor = torque.tolist()  # Convert numpy array to list
-                    writedata.time = 0.001
-                    self.torque_publisher.publish(writedata)
+                    writedata = SpeedJRTStream()
+                    writedata.pos = torque.tolist()  # Convert numpy array to list
+                    writedata.time = 0.01
+                    self.joint_publisher.publish(writedata)
                     
                     # Calculate and store gear ratio
                     # Avoid division by zero
@@ -227,49 +234,77 @@ class Gear_Ratio:
                     joint_torques = np.array(self.Robot_RT_State.actual_joint_torque)
                     
                     # Only calculate ratio when motor torque is significant
-                    if abs(motor_torques[current_joint]) > 0.01:
-                        gear_ratios[current_joint, sample_count] = joint_torques[current_joint] / motor_torques[current_joint]
+                    if abs(motor_torques[current_joint]) > 0.005:
+                        gear_ratios[current_joint, sample_count] = (joint_torques[current_joint] / motor_torques[current_joint])
                         sample_count += 1
-                    
+                
                     # Move to next joint after collecting enough samples
                     if sample_count >= data_points:
                         # Calculate average gear ratio for current joint
-                        avg_ratio = np.median(gear_ratios[current_joint, :])
-                        rospy.loginfo(f"Joint {current_joint} estimated gear ratio: {avg_ratio:.2f}")
+                        valid_ratios = np.array(gear_ratios[current_joint,:])
+                        mean_ratio = np.mean(valid_ratios)
+                        std_ratio = np.std(valid_ratios)
+                        
+                        # Filter outliers using standard deviation
+                        filtered_ratios = valid_ratios[abs(valid_ratios - mean_ratio) < 2 * std_ratio]
+                        final_ratio = np.mean(filtered_ratios)
+                        
+                        rospy.loginfo(f"Joint {current_joint}:")
+                        rospy.loginfo(f"  Estimated gear ratio: {final_ratio:.2f}")
+                        rospy.loginfo(f"  Standard deviation: {std_ratio:.2f}")
+                        rospy.loginfo(f"  Number of valid samples: {len(filtered_ratios)}")
                         
                         # Move to next joint
                         current_joint += 1
                         sample_count = 0
+                        self.start_time = rospy.Time.now()  # Reset time for new joint
                         
                         # Exit if we've tested all joints
                         if current_joint >= 6:
-                            break          
+                            break
+                    
                     rate.sleep()
                     
             # Print final results
-            final_ratios = np.median(gear_ratios, axis=1)
-            rospy.loginfo("Final estimated gear ratios:")
-            for joint, ratio in enumerate(final_ratios):
-                rospy.loginfo(f"Joint {joint}: {ratio:.2f}")
+            rospy.loginfo("\nFinal estimated gear ratios:")
+            for joint in range(6):
+                valid_ratios = np.array(gear_ratios[joint, :])
+                mean_ratio = np.mean(valid_ratios)
+                std_ratio = np.std(valid_ratios)
                 
+                # Filter outliers
+                filtered_ratios = valid_ratios[abs(valid_ratios - mean_ratio) < 2 * std_ratio]
+                final_ratio = np.mean(filtered_ratios)
+                
+                rospy.loginfo(f"Joint {joint}: {final_ratio:.2f} (±{std_ratio:.2f})")
+            
         except rospy.ROSInterruptException:
             pass
         finally:
             self.cleanup()
 
-if __name__ == "__main__":
+
+def main():
     try:
-        # Initialize ROS node first
-        rospy.init_node('my_node')
+        # Initialize ROS node
+        rospy.init_node('gear_ratio_node')
         
         # Create control object
-        task = Gear_Ratio()
+        gear_ratio = Gear_Ratio()
         rospy.sleep(1)  # Give time for initialization
         
-        # Start impedance control in a separate thread
-        control_thread = Thread(target=lambda: task.torque_control())
+        # Start gravity compensation in a separate thread
+        control_thread = Thread(target=gear_ratio.calculate_gear_ratio)
         control_thread.daemon = True
         control_thread.start()
+        
+        # Keep the main thread alive
+        rospy.spin()
             
     except rospy.ROSInterruptException:
         pass
+    except Exception as e:
+        rospy.logerr(f"Error in main: {e}")
+
+if __name__ == "__main__":
+    main()

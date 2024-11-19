@@ -294,7 +294,8 @@ if __name__ == "__main__":
         Xd_dot = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])  # [mm/s, deg/s]
         
         # Start impedance control in a separate thread
-        control_thread = Thread(target=lambda: task.impedence_control_static(Kd, Dd, Md, Xd, Xd_dot))
+        # control_thread = Thread(target=lambda: task.impedence_control_static(Kd, Dd, Md, Xd, Xd_dot))
+        control_thread = Thread(target=lambda: task.gravity_compensation())
         control_thread.daemon = True
         control_thread.start()
 

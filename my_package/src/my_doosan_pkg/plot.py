@@ -1,6 +1,7 @@
 #! /usr/bin/python3
 import rospy
 import time
+import threading
 from math import *
 import numpy as np
 import matplotlib
@@ -8,10 +9,10 @@ matplotlib.use('TkAgg')  # Must be before importing pyplot
 import matplotlib.pyplot as plt
 from collections import deque
 
+
 class RealTimePlot:
     def __init__(self, max_points=100):
         # Create figure with two subplots
-        plt.ion()  # Interactive mode on
         self.fig, (self.ax1, self.ax2) = plt.subplots(2, 1, figsize=(10, 12))
         self.fig.set_facecolor('white')  # White background
         plt.subplots_adjust(hspace=0.3)
