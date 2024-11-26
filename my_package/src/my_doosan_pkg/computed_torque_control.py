@@ -21,6 +21,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),"../../..
 from common_for_JLA import *
 from robot_RT_state import RT_STATE
 from plot import RealTimePlot
+from filters import Filters
 
 import DR_init
 DR_init.__dsr__id = "dsr01"
@@ -45,14 +46,18 @@ class Torque_Control():
     d = np.array([0.1555, 0, 0, 0.367, 0, 0.127])
     le = 0
 
-    def __init__(self):
+    def __init__(self, dt):
         self.is_rt_connected = False
         self.shutdown_flag = False  # Add flag to track shutdown state
         self.Robot_RT_State = RT_STATE()
 
+        self.dt = dt
+
+        self.filter = Filters(dt)
+
         # Initialize the plotter in the main thread
         self.plotter = RealTimePlot()
-        self.plotter.setup_plots_1()
+        self.plotter.setup_plots_2()
 
         # Initialize RT control services
         self.initialize_rt_service_proxies()
@@ -130,8 +135,8 @@ class Torque_Control():
                 raise Exception("Failed to connect RT control")
             
             set_output_req = SetRTControlOutputRequest()
-            set_output_req.period = 0.01
-            set_output_req.loss = 5
+            set_output_req.period = 0.001
+            set_output_req.loss = 4
             set_output_response = self.set_rt_control_output(set_output_req)
             if not set_output_response.success:
                 raise Exception("Failed to set RT control output")
@@ -142,6 +147,9 @@ class Torque_Control():
                         
             self.is_rt_connected = True
             rospy.loginfo("Successfully connected to RT control")
+
+            self.joint_vel_limits([150, 150, 150, 150, 150, 150])  # Increased from 50 deg/s
+            self.joint_acc_limits([100, 100, 100, 100, 100, 100])  # Increased from 25 deg/s^2
 
         except Exception as e:
             rospy.logerr(f"Failed to establish RT control connection: {e}")
@@ -197,9 +205,6 @@ class Torque_Control():
                 request = ReadDataRTRequest()
                 response = self.RT_observer_client(request)
 
-                # Plot Torque
-                self._plot_data(response.data)
-
                 with mtx:
                     self.Robot_RT_State.store_data(response.data)
                     
@@ -208,110 +213,164 @@ class Torque_Control():
                     rospy.logwarn(f"Service call failed: {e}") 
             rate.sleep()
 
-    def _plot_data(self, data):
-        """Thread-safe plotting function"""
+    def _plot_data(self):
+        """Thread-safe plotting function with joint errors"""
         try:
-            self.plotter.update_data_1(data.actual_motor_torque, data.external_tcp_force, data.raw_force_torque)
+            # Calculate joint errors if we have desired trajectory data
+            joint_errors = None
+            if hasattr(self, 'current_desired_position'):
+                current_position = np.array(self.Robot_RT_State.actual_joint_position_abs)
+                joint_errors = self.current_desired_position - current_position
+            
+            self.plotter.update_data_2(self.Robot_RT_State.actual_motor_torque, self.Robot_RT_State.external_tcp_force, self.Robot_RT_State.raw_force_torque, joint_errors)
         except Exception as e:
             rospy.logwarn(f"Error adding plot data: {e}")
 
-    def gravity_compensation(self):
-        """Implements torque control with gravity compensation"""
+    def computed_torque_control(self, Kp, Kd, qd, qd_dot, qd_ddot):
         rate = rospy.Rate(1000)
+        i = 0
+        
+        total_points = qd.shape[1]
         
         try:
-            start_time = rospy.Time.now()
-            while not rospy.is_shutdown() and not self.shutdown_flag:
+            while not rospy.is_shutdown() and not self.shutdown_flag and i < total_points:            
                 with mtx:
-                    G_torques = self.Robot_RT_State.gravity_torque
-                    t = (rospy.Time.now() - start_time).to_sec()
-                    
-                    writedata = TorqueRTStream()
-                    writedata.tor = G_torques
-                    writedata.time = 0.001
-                    
-                    self.torque_publisher.publish(writedata)
-                rate.sleep()
-        except rospy.ROSInterruptException:
-            pass
-        finally:
-            self.cleanup()
+                    # Store current desired position for plotting
+                    self.current_desired_position = qd[:,i]
 
-    def impedence_control_static(self, Kd, Dd, Md, Xd, Xd_dot):
-        """Implements torque control with gravity compensation"""
-        rate = rospy.Rate(1000)
-        
-        try:
-            start_time = rospy.Time.now()
-            while not rospy.is_shutdown() and not self.shutdown_flag:
-                with mtx:
+                    # Plot Torque
+                    self._plot_data()
+
                     G_torque = self.Robot_RT_State.gravity_torque
                     C_matrix = self.Robot_RT_State.coriolis_matrix
                     M_matrix = self.Robot_RT_State.mass_matrix
-                    F_ext = self.Robot_RT_State.external_tcp_force
 
+                    q = self.Robot_RT_State.actual_joint_position_abs
                     q_dot = self.Robot_RT_State.actual_joint_velocity_abs
-                    Xe = self.Robot_RT_State.actual_tcp_position     #  (x, y, z, a, b, c), where (a, b, c) follows Euler ZYZ notation [mm, deg]
-                    Xe_dot = self.Robot_RT_State.actual_tcp_velocity  # w.r.t. base coordinates in [mm, deg/s]
-                    J = self.Robot_RT_State.jacobian_matrix
 
-                    C_torque = (C_matrix @ q_dot[:, np.newaxis]).reshape(-1)
+                    # Calculate errors
+                    E = qd[:,i] - q
+                    E_dot = qd_dot[:,i] - q_dot
 
-                    # task space error
-                    E = Xd - Xe
-                    E_dot = Xd_dot - Xe_dot
+                    # Print progress
+                    if i % 500 == 0:
+                        print(f"Progress: {i}/{total_points} points ({(i/total_points)*100:.1f}%)")
+                        # print(f"Position error (deg): {E}")
+                        print(f"Max error: {np.max(np.abs(E))}")
+                        print("---------------------------------------------------------------------")
 
-                    # Classical Impedance Controller WITHOUT contact force feedback!!
-                    impedence_force = Kd @ E[:, np.newaxis] + Dd @ E_dot[:, np.newaxis]  # make E, E_dot column vector from row vector
-                    impedence_tau = (J.T @ impedence_force).reshape(-1)
+                    # Feed-back PD-control Input with reduced gains
+                    u = Kp @ E[:, np.newaxis] + Kd @ E_dot[:, np.newaxis]
 
-                    contact_tau = (J.T @ (M_matrix - np.eye(6)) @ F_ext[:, np.newaxis]).reshape(-1)
+                    # Compute control torque
+                    Torque = M_matrix @ (qd_ddot[:,[i]] + u) + C_matrix @ q_dot[:, np.newaxis] + G_torque[:, np.newaxis]
 
-                    torques = C_torque.tolist() + G_torque + impedence_tau.tolist() + contact_tau.tolist()   # Cartesian PD control with gravity cancellation
+                    Torque = self.filter.low_pass_filter_torque(Torque)  # Apply low-pass filter to smooth torque
+                    # Torque = self.filter.moving_average_filter(Torque)  # Apply moving average filter
+                    # Torque = self.filter.smooth_torque(Torque)  # Apply second-order filter
                     
+                    # Add torque limits
+                    torque_limits = np.array([70, 70, 70, 70, 70, 70])
+                    Torque = np.clip(Torque, -torque_limits[:, np.newaxis], torque_limits[:, np.newaxis])
+
+                    # Send torque command
                     writedata = TorqueRTStream()
-                    writedata.tor = G_torque
-                    writedata.time = 0.001
+                    writedata.tor = Torque
+                    writedata.time = 1.0 * self.dt
                     
                     self.torque_publisher.publish(writedata)
-                rate.sleep() 
-        except rospy.ROSInterruptException:
-            pass
+
+                rate.sleep()
+                i += 1
+            print(f"Control loop finished. Completed {i}/{total_points} points")
+            
+        except Exception as e:
+            print(f"Error in control loop: {e}")
         finally:
             self.cleanup()
+
+
+
+def generate_quintic_trajectory(q0, qf, t0, tf, dt=0.005):
+    """
+    Generate a quintic polynomial trajectory between two points.
+    
+    Args:
+        q0: Initial position
+        qf: Final position
+        t0: Initial time
+        tf: Final time
+        num_points: Number of points in the trajectory
+    
+    Returns:
+        t: Time points
+        q: Position trajectory
+        qd: Velocity trajectory
+        qdd: Acceleration trajectory
+    """
+    # Time vector
+    t = np.arange(t0, tf, dt)
+    
+    # Time parameters
+    T = tf - t0
+    
+    # Quintic polynomial coefficients
+    a0 = q0
+    a1 = 0  # Initial velocity = 0
+    a2 = 0  # Initial acceleration = 0
+    a3 = 10 * (qf - q0) / T**3
+    a4 = -15 * (qf - q0) / T**4
+    a5 = 6 * (qf - q0) / T**5
+    
+    # Compute position, velocity, and acceleration
+    q = a0 + a1*(t-t0) + a2*(t-t0)**2 + a3*(t-t0)**3 + a4*(t-t0)**4 + a5*(t-t0)**5
+    qd = a1 + 2*a2*(t-t0) + 3*a3*(t-t0)**2 + 4*a4*(t-t0)**3 + 5*a5*(t-t0)**4
+    qdd = 2*a2 + 6*a3*(t-t0) + 12*a4*(t-t0)**2 + 20*a5*(t-t0)**3
+    return t, q, qd, qdd
+
+def pre_process_trajectory(tf, dt):
+    # Define initial and final joint angles (in degrees)
+    q0 = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+    qf = np.array([90.0, 45.0, -45.0, 45.0, -45.0, 180.0])
+
+    # Increased time for slower motion
+    t0 = 0.0
+    t = np.arange(t0, tf, dt)
+    q_list = np.zeros((6, len(t)))
+    q_dot_list = np.zeros((6, len(t)))
+    q_ddot_list = np.zeros((6, len(t)))
+
+    for i in range(6):
+        _, q, qd, qdd = generate_quintic_trajectory(q0[i], qf[i], t0, tf, dt)
+        q_list[i, :len(q)] = q
+        q_dot_list[i, :len(qd)] = qd
+        q_ddot_list[i, :len(qdd)] = qdd
+
+    return t, q_list, q_dot_list, q_ddot_list
+
 
 if __name__ == "__main__":
     try:
         # Initialize ROS node first
         rospy.init_node('My_service_node')
+        dt = 0.002
+        t, qd, qd_dot, qd_ddot = pre_process_trajectory(tf=10.0, dt=dt)
         
         # Create control object
-        task = Torque_Control()
-        rospy.sleep(1)  # Give time for initialization
+        task = Torque_Control(dt)
+        rospy.sleep(2.5)  # Give time for initialization
 
-        Kd = np.diag([2.0, 2.0, 2.0, 1.0, 1.0, 1.0])
-        Dd = np.diag([0.5, 0.5, 0.5, 0.25, 0.25, 0.25])
-        Md = np.diag([0.1, 0.1, 0.1, 0.1, 0.1, 0.1])
-
-        x1, sol = get_current_posx()   #  x1 w.r.t. DR_BASE
-        Xd = np.array(x1)  # [mm, deg]
-        Xd_dot = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])  # [mm/s, deg/s]
+        Kp = np.diag([2.5, 2.5, 3.0, 3.5, 30.0, 300.0]) 
+        Kd = np.diag([0.5, 0.5, 0.5, 0.5, 2.0, 20.0])
         
         # Start impedance control in a separate thread
-        control_thread = Thread(target=lambda: task.impedence_control_static(Kd, Dd, Md, Xd, Xd_dot))
-        # control_thread = Thread(target=lambda: task.gravity_compensation())
+        control_thread = Thread(target=lambda: task.computed_torque_control(Kp, Kd, qd, qd_dot, qd_ddot))
         control_thread.daemon = True
         control_thread.start()
-
-        # print(np.round(task.Robot_RT_State.jacobian_matrix, 3), '\n')
-        # theta = task.Robot_RT_State.actual_joint_position_abs
-        # print("=============================================")
-        # J = jacobian_matrix(task.n, task.alpha, task.a, task.d, np.radians(theta))
-        # print(J)
         
         # Keep the main thread running for the plot
         while not rospy.is_shutdown():
-            plt.pause(0.1)  # This keeps the plot window responsive
+            plt.pause(0.05)  # This keeps the plot window responsive
             
     except rospy.ROSInterruptException:
         pass
