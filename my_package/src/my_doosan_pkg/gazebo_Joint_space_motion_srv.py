@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-
-import rospy
 import os
+import sys
 from math import *
+import rospy
 import numpy as np
 import time
 import threading  # Threads are a way to run multiple tasks concurrently within a single process. By using threads, you can perform multiple operations simultaneously, which can be useful for tasks like handling asynchronous events, running background tasks.
-import sys
+
 sys.dont_write_bytecode = True
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),"../../common/imp"))) # get import path : DSR_ROBOT.py 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),"../../../common/imp"))) # get import path : DSR_ROBOT.py 
 
 import DR_init  # at doosan-robot/common/imp/
 DR_init.__dsr__id = "dsr01"
