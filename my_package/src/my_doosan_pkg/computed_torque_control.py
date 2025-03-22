@@ -1,37 +1,14 @@
-#! /usr/bin/python3
+#!/usr/bin/env python3
 import os
-import time
 import sys
-import rospy
-from math import *
-from threading import Lock, Thread
-import numpy as np
-np.set_printoptions(suppress=True)
-
-import matplotlib
-matplotlib.use('TkAgg')  # Must be before importing pyplot
-import matplotlib.pyplot as plt
-
 sys.dont_write_bytecode = True
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),"../../../common/imp")))
-
-from common_for_JLA import *
-from robot_RT_state import RT_STATE
-from plot import RealTimePlot
-from filters import Filters
-from doosanA0509s import Robot
-
-import DR_init
-DR_init.__dsr__id = "dsr01"
-DR_init.__dsr__model = "a0509"
-
-from DSR_ROBOT import *
-from DR_common import *
-
-from dsr_msgs.msg import *
-from dsr_msgs.srv import *
-from sensor_msgs.msg import JointState
-
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),"../../../common/imp"))) # get import path : DSR_ROBOT.py 
+from basic_import import *
+from .common_utils.doosanA0509s import Robot
+from .common_utils.filters import Filters
+from .common_utils.plot import RealTimePlot
+from .common_utils.robot_RT_state import RT_STATE
+# from common_for_JLA import *
 
 class CTC(Robot):
     def __init__(self, dt):

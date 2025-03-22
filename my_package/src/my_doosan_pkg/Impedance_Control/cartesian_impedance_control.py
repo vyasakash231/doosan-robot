@@ -1,38 +1,12 @@
 #! /usr/bin/python3
 import os
-import time
 import sys
-import rospy
-from math import *
-from threading import Lock, Thread
-import numpy as np
-np.set_printoptions(suppress=True)
-
-import matplotlib
-matplotlib.use('TkAgg')  # Must be before importing pyplot
-import matplotlib.pyplot as plt
-from scipy.spatial.transform import Rotation
-
 sys.dont_write_bytecode = True
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),"../../../common/imp")))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),"../")))
 
-from common_for_JLA import *
-from robot_RT_state import RT_STATE
-from plot import RealTimePlot
-from doosanA0509s import Robot
-from utils import *
-
-import DR_init
-DR_init.__dsr__id = "dsr01"
-DR_init.__dsr__model = "a0509"
-
-from DSR_ROBOT import *
-from DR_common import *
-
-from dsr_msgs.msg import *
-from dsr_msgs.srv import *
-from sensor_msgs.msg import JointState
-
+from basic_import import *
+from common_utils import *
+from scipy.spatial.transform import Rotation
 
 class CartesianImpedanceControl(Robot):
     def __init__(self):

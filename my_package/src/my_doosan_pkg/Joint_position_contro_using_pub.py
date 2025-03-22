@@ -1,35 +1,10 @@
 #!/usr/bin/env python3
-import rospy
 import os
-from math import *
-import numpy as np
-import time
-import threading  # Threads are a way to run multiple tasks concurrently within a single process. By using threads, you can perform multiple operations simultaneously, which can be useful for tasks like handling asynchronous events, running background tasks.
 import sys
 sys.dont_write_bytecode = True
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),"../../common/imp"))) # get import path : DSR_ROBOT.py 
-
-import DR_init  # at doosan-robot/common/imp/
-DR_init.__dsr__id = "dsr01"
-DR_init.__dsr__model = "a0509"
-
-from DSR_ROBOT import *  # at doosan-robot/common/imp/
-from DR_common import *  # at doosan-robot/common/imp/
-
-import pyrealsense2 as rs
-import cv2 as cv
-from cv2 import aruco
-
-# Importing messages and services 
-from dsr_msgs.msg import RobotStop, RobotState, ServoJRTStream, ServoJStream  # at doosan-robot/dsr_msgs/msg/
-from dsr_msgs.srv import *
-from sensor_msgs.msg import JointState
-from std_msgs.msg import Float64MultiArray
-from tf2_msgs.msg import TFMessage
-
+from basic_import import *
 from scipy.spatial.transform import Rotation
-
-np.set_printoptions(suppress=True)  # to aviod scientific notation while printing numpy array
 
 def call_back_func(msg):
     T_matrix = np.zeros((6,4,4))

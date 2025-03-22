@@ -1,25 +1,9 @@
 #!/usr/bin/env python3
-
-import rospy
 import os
-from math import *
-import numpy as np
-import time
-import threading  # Threads are a way to run multiple tasks concurrently within a single process. By using threads, you can perform multiple operations simultaneously, which can be useful for tasks like handling asynchronous events, running background tasks.
 import sys
 sys.dont_write_bytecode = True
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),"../../../common/imp"))) # get import path : DSR_ROBOT.py 
-
-import DR_init  # at doosan-robot/common/imp/
-DR_init.__dsr__id = "dsr01"
-DR_init.__dsr__model = "a0509"
-
-from DSR_ROBOT import *  # at doosan-robot/common/imp/
-from DR_common import *  # at doosan-robot/common/imp/
-
-# Importing messages and services 
-from dsr_msgs.msg import RobotStop, RobotState  # at doosan-robot/dsr_msgs/msg/
-from sensor_msgs.msg import JointState
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),"../../common/imp"))) # get import path : DSR_ROBOT.py 
+from basic_import import *
 
 def shutdown():
     print("shutdown time!")
@@ -90,7 +74,7 @@ if __name__ == "__main__":
     # p1= posj(0,0,90,0,90,0)  # posj(q1, q2, q3, q4, q5, q6) This function designates the joint space angle in degrees
     # movej(p1, vel=40, acc=20)
 
-    p1= posj(0,0,0,0,0,0)  # posj(q1, q2, q3, q4, q5, q6) This function designates the joint space angle in degrees
+    p1= posj(0,0,60,0,45,0)  # posj(q1, q2, q3, q4, q5, q6) This function designates the joint space angle in degrees
     movej(p1, vel=40, acc=20)
     
     rospy.spin()  # To stop the loop and program by pressing ctr + C

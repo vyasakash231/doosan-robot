@@ -1,29 +1,10 @@
-import cv2 as cv
-from cv2 import aruco
-import numpy as np
-import pyrealsense2 as rs
-import time
-from scipy.spatial.transform import Rotation 
-import rospy
 import os
-from math import *
 import sys
 sys.dont_write_bytecode = True
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),"../../common/imp"))) # get import path : DSR_ROBOT.py 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),"../../../common/imp"))) # get import path : DSR_ROBOT.py 
+from basic_import import *
 
-import DR_init  # at doosan-robot/common/imp/
-DR_init.__dsr__id = "dsr01"
-DR_init.__dsr__model = "a0509"
-
-from DSR_ROBOT import *  # at doosan-robot/common/imp/
-from DR_common import *  # at doosan-robot/common/imp/
-
-# Importing messages and services 
-from dsr_msgs.msg import RobotStop, RobotState  # at doosan-robot/dsr_msgs/msg/
-from dsr_msgs.srv import *
-from sensor_msgs.msg import JointState
-from tf2_msgs.msg import TFMessage
-
+from scipy.spatial.transform import Rotation 
 
 class Camera:
     def __init__(self):
@@ -76,11 +57,11 @@ class Camera:
         align_to = rs.stream.color
         self.align = rs.align(align_to)
 
-        camera_matrix = np.array([[603.7866956,0,330.24231461],
-                                [0,606.00911541,245.79774661],
-                                [0,0,1]])
+        camera_matrix = np.array([[603.7866956,      0      , 330.24231461],
+                                  [     0     , 606.00911541, 245.79774661],
+                                  [     0     ,      0      ,     1       ]])
         
-        dist_coeffs = np.array([[-0.01640182,0.92663735,0.00520239,0.00355203,-3.29411829]])
+        dist_coeffs = np.array([[-0.01640182, 0.92663735, 0.00520239, 0.00355203, -3.29411829]])
 
         # dictionary to specify type of the marker
         self.marker_dict = aruco.getPredefinedDictionary(aruco.DICT_7X7_250)
@@ -123,7 +104,7 @@ class Camera:
                 continue    
 
             # Defining depth_image
-            depth_image = np.asanyarray(depth_frame.get_data())
+            # depth_image = np.asanyarray(depth_frame.get_data())
             color_image = np.asanyarray(color_frame.get_data())
 
             # turning the frame to grayscale-only (for efficiency)

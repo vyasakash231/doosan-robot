@@ -1,41 +1,16 @@
 #! /usr/bin/python3
 import os
-import time
 import sys
-import rospy
-from math import *
-from threading import Lock, Thread
-import numpy as np
-np.set_printoptions(suppress=True)
-
-import matplotlib
-matplotlib.use('TkAgg')  # Must be before importing pyplot
-import matplotlib.pyplot as plt
-
 sys.dont_write_bytecode = True
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),"../../../common/imp")))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),"../")))
 
-from common_for_JLA import *
-from robot_RT_state import RT_STATE
-from utils import *
-from plot import RealTimePlot
-from doosanA0509s import Robot
-
-import DR_init
-DR_init.__dsr__id = "dsr01"
-DR_init.__dsr__model = "a0509"
-
-from DSR_ROBOT import *
-from DR_common import *
-
-from dsr_msgs.msg import *
-from dsr_msgs.srv import *
-from sensor_msgs.msg import JointState
+from basic_import import *
+from common_utils import *
+from scipy.spatial.transform import Rotation
 
 
 class GravityCompensation(Robot):
     def __init__(self):
-        self.is_rt_connected = False
         self.shutdown_flag = False  
         self.Robot_RT_State = RT_STATE()
 
@@ -43,28 +18,52 @@ class GravityCompensation(Robot):
         self.plotter = RealTimePlot()
         self.plotter.setup_plots_1()
 
+        # Initial estimated frictional torque
+        self.fric_torques = np.zeros(self.n)
+
+        self.J_m = np.diag([0.0004956, 0.0004956, 0.0001839, 0.00009901, 0.00009901, 0.00009901])
+        self.K_o = np.diag([0.12, 0.1, 0.225, 0.15, 0.225, 0.5])
+
         super().__init__()
 
     def plot_data(self, data):
         try:
-            self.plotter.update_data_1(data.actual_motor_torque, data.external_tcp_force, data.raw_force_torque)
+            self.plotter.update_data_1(data.actual_motor_torque, data.raw_force_torque, data.actual_joint_torque, data.raw_joint_torque)
         except Exception as e:
             rospy.logwarn(f"Error adding plot data: {e}")
 
-    def run_controller(self):
-        rate = rospy.Rate(1000)
-        
-        try:
-            start_time = rospy.Time.now()
-            while not rospy.is_shutdown() and not self.shutdown_flag:
-                G_torques = self.Robot_RT_State.gravity_torque
-                t = (rospy.Time.now() - start_time).to_sec()
+    def calc_friction_torque(self):
+        motor_torque = self.Robot_RT_State.actual_motor_torque
+        joint_torque = self.Robot_RT_State.actual_joint_torque
+        q_dot = 0.0174532925 * self.Robot_RT_State.actual_joint_velocity_abs  # convert from deg/s to rad/s
 
-                print(self.Robot_RT_State.actual_flange_position, self.Robot_RT_State.actual_tcp_position)
-                
+        term_1 = np.dot(self.K_o, (motor_torque - joint_torque - self.fric_torques)) * 0.001
+        term_2 = np.dot(self.K_o, np.dot(self.J_m, (self.q_dot_prev - q_dot)))
+        self.fric_torques = self.fric_torques + term_1 + term_2
+
+        self.q_dot_prev = q_dot.copy()
+
+    def run_controller(self):
+        self.q_dot_prev = self.Robot_RT_State.actual_joint_velocity_abs.copy() 
+        rate = rospy.Rate(self.write_rate)
+        try:
+            while not rospy.is_shutdown() and not self.shutdown_flag:
+                G_torques = self.Robot_RT_State.gravity_torque  # calculate gravitational torque in Nm
+                self.calc_friction_torque() #  estimate frictional torque in Nm
+
+                q = 0.0174532925 * self.Robot_RT_State.actual_joint_position   # convert deg to rad
+
+                X, _, _ = self.kinematic_model.FK(q)
+
+                print("from package: ", np.round(self.Robot_RT_State.actual_flange_position, 4), "\n")
+                print(print("from package: ", np.round(self.Robot_RT_State.actual_tcp_position, 4), "\n"))
+                print("my calc: ",np.round(X, 4))
+                print("==============================================================")
+    
+                torque = G_torques #+ self.fric_torques
                 writedata = TorqueRTStream()
-                writedata.tor = G_torques
-                writedata.time = 0.001
+                writedata.tor = torque
+                writedata.time = 0.0
                 
                 self.torque_publisher.publish(writedata)
                 rate.sleep()
@@ -80,7 +79,7 @@ if __name__ == "__main__":
         
         # Create control object
         task = GravityCompensation()
-        rospy.sleep(1)  # Give time for initialization
+        rospy.sleep(2)  # Give time for initialization
         
         # Start G control in a separate thread
         control_thread = Thread(target=lambda: task.run_controller())

@@ -1,33 +1,15 @@
-import cv2 as cv
-from cv2 import aruco
-import numpy as np
-import pyrealsense2 as rs
-import time
-import threading
-from scipy.spatial.transform import Rotation 
-from scipy.linalg import expm
-import rospy
+#!/usr/bin/env python3
 import os
-from math import *
 import sys
 sys.dont_write_bytecode = True
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),"../../common/imp"))) # get import path : DSR_ROBOT.py 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),"../../../common/imp"))) # get import path : DSR_ROBOT.py 
+from basic_import import *
 
-import DR_init  # at doosan-robot/common/imp/
-DR_init.__dsr__id = "dsr01"
-DR_init.__dsr__model = "a0509"
-
-from DSR_ROBOT import *  # at doosan-robot/common/imp/
-from DR_common import *  # at doosan-robot/common/imp/
-
-# Importing messages and services 
-from dsr_msgs.msg import RobotStop, RobotState  # at doosan-robot/dsr_msgs/msg/
-from dsr_msgs.srv import *
-from sensor_msgs.msg import JointState
-from tf2_msgs.msg import TFMessage
+from scipy.spatial.transform import Rotation 
+from scipy.linalg import expm
 
 from camera import Camera
-from common import transformation_matrix, weight_Func   
+# from common import transformation_matrix, weight_Func   
 
 np.set_printoptions(suppress=True)  # to aviod scientific notation while printing numpy array
 
@@ -63,9 +45,9 @@ class Visual_Servoing:
 
         # Construct the skew-symmetric matrix representation of the twist vector
         v_skew = np.array([[0, -v_rot[2], v_rot[1], v_trans[0]],
-                        [v_rot[2], 0, -v_rot[0], v_trans[1]],
-                        [-v_rot[1], v_rot[0], 0, v_trans[2]],
-                        [0, 0, 0, 0]])
+                           [v_rot[2], 0, -v_rot[0], v_trans[1]],
+                           [-v_rot[1], v_rot[0], 0, v_trans[2]],
+                           [0, 0, 0, 0]])
 
         # Compute the exponential of the skew-symmetric matrix
         R = expm(v_skew)

@@ -1,50 +1,50 @@
 #! /usr/bin/python3
-import os
-import time
-import sys
-from abc import ABC, abstractmethod
-import rospy
-from math import *
-from threading import Lock, Thread
-import numpy as np
-np.set_printoptions(suppress=True)
-
-sys.dont_write_bytecode = True
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),"../../../common/imp")))
-
-import DR_init
-DR_init.__dsr__id = "dsr01"
-DR_init.__dsr__model = "a0509"
-
-from DSR_ROBOT import *
-from DR_common import *
-
-from dsr_msgs.msg import *
-from dsr_msgs.srv import *
-from sensor_msgs.msg import JointState
-
+from basic_import import *
+from Dynamics import Robot_Dynamics, Robot_KM
 
 class Robot(ABC):
     n = 6  # No of joints
 
-    # DH Parameters
-    alpha = np.array([0, -pi/2, 0, pi/2, -pi/2, pi/2])   
-    a = np.array([0, 0, 0.409, 0, 0, 0])
-    d = np.array([0.1555, 0, 0, 0.367, 0, 0.127])
-    le = 0
+    # Modified-DH Parameters (same as conventional/standard DH parameters)
+    alpha = np.array([0, -np.pi/2, 0, np.pi/2, -np.pi/2, np.pi/2])   
+    a = np.array([0, 0, 0.409, 0, 0, 0])  # data from parameter data-sheet (in meters)
+    d = np.array([0.1555, 0, 0, 0.367, 0, 0.127])  # data from parameter data-sheet (in meters)
+    d_nn = np.array([[0.0], [0.0], [0.0]])  # TCP coord in end-effector frame
+    DH_params="modified"
 
     def __init__(self):
+        # kinematic_property = {'dof':self.n, 'alpha':self.alpha, 'a':self.a, 'd':self.d, 'd_nn':self.d_nn}
+        
+        # # Dyanamic ParametersX_cord
+        # mass = np.array([3.72, 6.84, 2.77, 2.68, 2.05, 0.87])  # in Kg
+        # COG_wrt_body = [np.array([[-0.00069], [0.24423], [1.48125]]), 
+        #                 np.array([[0.0], [1.3271], [3.59986]]), 
+        #                 np.array([[0.00071], [0.33009], [5.69623]]), 
+        #                 np.array([[-0.00086], [0.86348], [8.45469]]),
+        #                 np.array([[0.00091], [0.15434], [9.37957]]),
+        #                 np.array([[-0.00022], [-0.00007], [10.07754]])]  # location of COG wrt to DH-frame / body frame
+        # MOI_about_body_CG = []  # MOI of the link about COG 
+
+        # self.dynamic_model = Robot_Dynamics(kinematic_property, mass, COG_wrt_body, MOI_about_body_CG, file_name="doosan_a0509s")
+
+        self.kinematic_model = Robot_KM(self.n, self.alpha, self.a, self.d, self.d_nn, self.DH_params)
+
+        self.is_rt_connected = False
+        
         # Initialize RT control services
         self.initialize_rt_service_proxies()
         
         self.my_publisher = rospy.Publisher('/dsr01a0509/stop', RobotStop, queue_size=10)
-
+        
+        # Real-time data Publisher --> rospy.Publisher(topic_name, message_type, queue_size)
         self.speedj_publisher = rospy.Publisher('/dsr01a0509/speedj_rt_stream', SpeedJRTStream, queue_size=10)        
         self.speedl_publisher = rospy.Publisher('/dsr01a0509/servol_rt_stream', ServoLRTStream, queue_size=10)         
-        self.torque_publisher = rospy.Publisher('/dsr01a0509/torque_rt_stream', TorqueRTStream, queue_size=10)
+        self.torque_publisher = rospy.Publisher('/dsr01a0509/torque_rt_stream', TorqueRTStream, queue_size=10)  
 
-        self.RT_observer_client = rospy.ServiceProxy('/dsr01a0509/realtime/read_data_rt', ReadDataRT)
-        self.RT_writer_client = rospy.ServiceProxy('/dsr01a0509/realtime/write_data_rt', WriteDataRT)
+        self.RT_observer_client = rospy.ServiceProxy('/dsr01a0509/realtime/read_data_rt', ReadDataRT)  
+
+        self.read_rate = 3000 # in Hz (0.333 ms)
+        self.write_rate = 1000 # in Hz (1 ms)
 
         self.client_thread_ = Thread(target=self.read_data_rt_client)
         self.client_thread_.daemon = True  # Make thread daemon so it exits when main thread exits
@@ -54,7 +54,7 @@ class Robot(ABC):
 
     def initialize_rt_service_proxies(self):
         try:
-            service_timeout = 5.0
+            service_timeout = 3.0
             services = [
                 ('/dsr01a0509/system/set_robot_mode', SetRobotMode),
                 ('/dsr01a0509/realtime/connect_rt_control', ConnectRTControl),
@@ -111,7 +111,7 @@ class Robot(ABC):
             
             set_output_req = SetRTControlOutputRequest()
             set_output_req.period = 0.001
-            set_output_req.loss = 5
+            set_output_req.loss = 4
             set_output_response = self.set_rt_control_output(set_output_req)
             if not set_output_response.success:
                 raise Exception("Failed to set RT control output")
@@ -166,7 +166,7 @@ class Robot(ABC):
             rospy.loginfo("Cleanup process finished")
 
     def read_data_rt_client(self):
-        rate = rospy.Rate(1000)  # 1000 Hz
+        rate = rospy.Rate(self.read_rate)  # 3000 Hz
         
         while not rospy.is_shutdown() and not self.shutdown_flag:
             try:
@@ -182,7 +182,7 @@ class Robot(ABC):
                 
                 # Store Real-Time data
                 self.Robot_RT_State.store_data(response.data)
-                    
+                 
             except (rospy.ServiceException, rospy.ROSException) as e:
                 if not self.shutdown_flag:  # Only log if we're not shutting down
                     rospy.logwarn(f"Service call failed: {e}") 
