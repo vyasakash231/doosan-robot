@@ -2,6 +2,42 @@ import numpy as np
 import numpy.linalg as LA
 from math import *
 
+# epsilon for testing whether a number is close to zero
+_EPS = np.finfo(float).eps * 4.0
+
+# axis sequences for Euler angles
+_NEXT_AXIS = [1, 2, 0, 1]
+
+# map axes strings to/from tuples of inner axis, parity, repetition, frame
+_AXES2TUPLE = {
+    'sxyz': (0, 0, 0, 0),
+    'sxyx': (0, 0, 1, 0),
+    'sxzy': (0, 1, 0, 0),
+    'sxzx': (0, 1, 1, 0),
+    'syzx': (1, 0, 0, 0),
+    'syzy': (1, 0, 1, 0),
+    'syxz': (1, 1, 0, 0),
+    'syxy': (1, 1, 1, 0),
+    'szxy': (2, 0, 0, 0),
+    'szxz': (2, 0, 1, 0),
+    'szyx': (2, 1, 0, 0),
+    'szyz': (2, 1, 1, 0),
+    'rzyx': (0, 0, 0, 1),
+    'rxyx': (0, 0, 1, 1),
+    'ryzx': (0, 1, 0, 1),
+    'rxzx': (0, 1, 1, 1),
+    'rxzy': (1, 0, 0, 1),
+    'ryzy': (1, 0, 1, 1),
+    'rzxy': (1, 1, 0, 1),
+    'ryxy': (1, 1, 1, 1),
+    'ryxz': (2, 0, 0, 1),
+    'rzxz': (2, 0, 1, 1),
+    'rxyz': (2, 1, 0, 1),
+    'rzyz': (2, 1, 1, 1),
+}
+
+_TUPLE2AXES = {v: k for k, v in _AXES2TUPLE.items()}
+
 
 class Robot_KM:
     def __init__(self,n,alpha,a,d,d_nn,DH_params="modified"):
@@ -15,8 +51,17 @@ class Robot_KM:
         # off-set in joint angles
         self.offset = np.array([0.0, -np.pi/2, np.pi/2, 0.0, 0.0, 0.0])
 
+        # base transform to account for robot's reference frame
+        self.T_base = np.array([
+            [1.0, 0.0, 0.0, -0.00064],   # Approximate x offset (in meters)
+            [0.0, 1.0, 0.0, -0.00169],   # Approximate y offset (in meters)
+            [0.0, 0.0, 1.0, 0.0],     # No z offset
+            [0.0, 0.0, 0.0, 1.0]
+        ])
+
     def _transformation_matrix(self,theta):
-        I = np.eye(4)
+        # I = np.eye(4)
+        I = self.T_base.copy()
         R = np.zeros((self.n,3,3))
         O = np.zeros((3,self.n))
 
@@ -32,7 +77,6 @@ class Robot_KM:
                 R[i,:,:] = T_new[:3,:3]
                 O[:3,i] = T_new[:3,3]
                 I = T_new
-                i= i + 1
 
         if self.DH_params == "standard":
             # Transformation Matrix
@@ -46,7 +90,6 @@ class Robot_KM:
                 R[i,:,:] = T_new[:3,:3]
                 O[:3,i] = T_new[:3,3]
                 I = T_new
-                i= i + 1
 
         P_00 = O[:,[-1]] + np.dot(R[-1,:,:], self.d_nn)
         return  R, O, P_00
@@ -135,35 +178,17 @@ class Robot_KM:
         Y_cord = np.array([0,O[1,0],O[1,1],O[1,2],O[1,3],O[1,4],O[1,5],P_00[1,0]])
         Z_cord = np.array([0,O[2,0],O[2,1],O[2,2],O[2,3],O[2,4],O[2,5],P_00[2,0]])
         return X_cord, Y_cord, Z_cord   
-
-    def mat2euler(self, rmat):
-        """
-        Converts given rotation matrix to euler angles (r,p,y) in radian.
-        """
-        # Extract rotation matrix
-        R = rmat[0:3, 0:3]
-            
-        # Convert rotation matrix to Euler angles (Z-Y-Z convention)
-        if abs(R[2, 2]) < 1.0:
-            p = acos(R[2, 2])
-            w = atan2(R[0, 2], -R[1, 2])
-            r = atan2(R[2, 0], R[2, 1])
-        else:
-            # Gimbal lock case
-            p = 0.0 if R[2, 2] > 0 else pi
-            r = 0.0  # arbitrary, we set it to 0
-            w = atan2(-R[1, 0], R[0, 0])
-
-        return [w, p, r]
-
+    
     def FK(self, theta, theta_dot=None, theta_ddot=None, level="pos"):
         theta = theta + self.offset
         
         if level == "pos":
             R, _, EE_pos = self._transformation_matrix(theta)  # end-effector position
-            EE_orient = self.mat2euler(R[-1,:,:])  # end-effector orientation
-            self.Xe = np.concatenate([1000*EE_pos.reshape(-1), np.degrees(EE_orient)])  # end-effector position
-            return self.Xe.astype(np.float64), [], []
+            # EE_orient = self.rotm2eulxyz(R[-1,:,:])  # end-effector orientation
+            # # EE_orient = self.mat2euler(R[-1,:,:], axes='rzyz')
+            # self.Xe = np.concatenate([1000*EE_pos.reshape(-1), np.degrees(EE_orient)])  # end-effector position
+            # return self.Xe.astype(np.float64), [], []
+            return R[-1,:,:], [], []
 
         # if level == "vel":
         #     _,J,_ = self.J(theta)   # only linear velocity

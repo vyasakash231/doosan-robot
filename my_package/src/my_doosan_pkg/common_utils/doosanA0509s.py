@@ -1,5 +1,6 @@
 #! /usr/bin/python3
 from basic_import import *
+from geometry_msgs.msg import Pose, PoseStamped, Twist, Quaternion, TransformStamped
 from Dynamics import Robot_Dynamics, Robot_KM
 
 class Robot(ABC):
@@ -191,3 +192,46 @@ class Robot(ABC):
     @abstractmethod   # Force child classes to implement this method
     def plot_data(self, data):
         pass  
+
+    def eulerZYZ_2_matrix(self, z1_angle, y_angle, z2_angle):
+        """
+        Convert Euler ZYZ rotation angles to a 3D rotation matrix.
+        
+        Args:
+        z1_angle (float): First rotation angle around Z-axis in radians
+        y_angle (float): Rotation angle around Y-axis in radians
+        z2_angle (float): Second rotation angle around Z-axis in radians
+        
+        Returns:
+        numpy.ndarray: 3x3 rotation matrix
+        """
+        # Rotation matrices for individual axes
+        Rz1 = np.array([
+            [math.cos(z1_angle), -math.sin(z1_angle), 0],
+            [math.sin(z1_angle), math.cos(z1_angle), 0],
+            [0, 0, 1]
+        ])
+        
+        Ry = np.array([
+            [math.cos(y_angle), 0, math.sin(y_angle)],
+            [0, 1, 0],
+            [-math.sin(y_angle), 0, math.cos(y_angle)]
+        ])
+        
+        Rz2 = np.array([
+            [math.cos(z2_angle), -math.sin(z2_angle), 0],
+            [math.sin(z2_angle), math.cos(z2_angle), 0],
+            [0, 0, 1]
+        ])
+        
+        # Combine rotations in ZYZ order
+        """
+        * The rotation order (Z1 * Y * Z2) is typically referred to as the "intrinsic" ZYZ rotation sequence
+        * The rotation order (Z2 * Y * Z1) is typically referred to as the "extrinsic" ZYZ rotation sequence
+
+        The key difference is that intrinsic rotations are performed relative to the object's current orientation, 
+        while extrinsic rotations are performed relative to the fixed global coordinate system.
+        """
+        R = Rz1 @ Ry @ Rz2
+        
+        return R

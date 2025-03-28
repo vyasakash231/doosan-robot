@@ -22,7 +22,7 @@ class GravityCompensation(Robot):
         self.fric_torques = np.zeros(self.n)
 
         self.J_m = np.diag([0.0004956, 0.0004956, 0.0001839, 0.00009901, 0.00009901, 0.00009901])
-        self.K_o = np.diag([0.12, 0.1, 0.225, 0.15, 0.225, 0.5])
+        self.K_o = np.diag([0.1, 0.1, 0.2, 0.15, 0.25, 0.5])
 
         super().__init__()
 
@@ -35,7 +35,7 @@ class GravityCompensation(Robot):
     def calc_friction_torque(self):
         motor_torque = self.Robot_RT_State.actual_motor_torque
         joint_torque = self.Robot_RT_State.actual_joint_torque
-        q_dot = 0.0174532925 * self.Robot_RT_State.actual_joint_velocity_abs  # convert from deg/s to rad/s
+        q_dot = 0.0174532925 * self.Robot_RT_State.actual_joint_velocity  # convert from deg/s to rad/s
 
         term_1 = np.dot(self.K_o, (motor_torque - joint_torque - self.fric_torques)) * 0.001
         term_2 = np.dot(self.K_o, np.dot(self.J_m, (self.q_dot_prev - q_dot)))
@@ -44,29 +44,34 @@ class GravityCompensation(Robot):
         self.q_dot_prev = q_dot.copy()
 
     def run_controller(self):
-        self.q_dot_prev = self.Robot_RT_State.actual_joint_velocity_abs.copy() 
+        self.q_dot_prev = self.Robot_RT_State.actual_joint_velocity.copy() 
         rate = rospy.Rate(self.write_rate)
         try:
             while not rospy.is_shutdown() and not self.shutdown_flag:
                 G_torques = self.Robot_RT_State.gravity_torque  # calculate gravitational torque in Nm
                 self.calc_friction_torque() #  estimate frictional torque in Nm
 
-                q = 0.0174532925 * self.Robot_RT_State.actual_joint_position   # convert deg to rad
+                # q = 0.0174532925 * self.Robot_RT_State.actual_joint_position   # convert deg to rad
 
-                X, _, _ = self.kinematic_model.FK(q)
+                # X, _, _ = self.kinematic_model.FK(q)  # q must be in rad
 
-                print("from package: ", np.round(self.Robot_RT_State.actual_flange_position, 4), "\n")
-                print(print("from package: ", np.round(self.Robot_RT_State.actual_tcp_position, 4), "\n"))
-                print("my calc: ",np.round(X, 4))
-                print("==============================================================")
+                # # print("at joint angles: ", self.Robot_RT_State.actual_joint_position, "\n")
+                # # print("from package: ", np.round(self.Robot_RT_State.actual_flange_position, 4), "\n")
+                # alpha, beta, gamma = np.radians(self.Robot_RT_State.actual_flange_position[3:])
+                # mat_1 = self.eulerZYZ_2_matrix(alpha, beta, gamma)
+                # print(np.round(mat_1, 3), "\n")
+                # print(np.round(X, 3))
+                # # print(self.curr_pos, self.curr_ori)
+                # print("==============================================================")
     
-                torque = G_torques #+ self.fric_torques
+                torque = G_torques + self.fric_torques
                 writedata = TorqueRTStream()
                 writedata.tor = torque
                 writedata.time = 0.0
                 
                 self.torque_publisher.publish(writedata)
                 rate.sleep()
+
         except rospy.ROSInterruptException:
             pass
         finally:

@@ -8,7 +8,6 @@ from basic_import import *
 from common_utils import *
 from scipy.spatial.transform import Rotation
 
-
 class StaticImpedanceControl(Robot):
     def __init__(self):
         self.shutdown_flag = False  
@@ -51,10 +50,10 @@ class StaticImpedanceControl(Robot):
     def start(self):
         """Initialize controller with current robot state"""
         # Set equilibrium point to current state
-        self.position_des = self.Robot_RT_State.actual_flange_position[:3].copy()    # (x, y, z)
+        self.position_des = self.Robot_RT_State.actual_flange_position[:3].copy()    # (x, y, z) in mm
         _angles = self.Robot_RT_State.actual_flange_position[3:]    # (a, b, c) in degrees
-        self.orientation_des = Rotation.from_euler('zyz', _angles, degrees=True).as_quat().copy()  # Convert angles from Euler ZYZ to quaternion Quaternion (x, y, z, w)
-        self.q_dot_prev = self.Robot_RT_State.actual_joint_velocity_abs.copy() 
+        self.orientation_des = Rotation.from_euler('zyz', _angles, degrees=True).as_quat().copy()   # Convert angles from Euler ZYZ to quaternion Quaternion (x, y, z, w)
+        self.q_dot_prev = 0.0174532925 * self.Robot_RT_State.actual_joint_velocity.copy()   # convert from deg/s to rad/s
         rospy.loginfo("CartesianImpedanceController: Controller started")
 
     def set_compliance_parameters(self, translational_stiffness, rotational_stiffness):
@@ -77,6 +76,7 @@ class StaticImpedanceControl(Robot):
         # for i in range(len(tau)):
         #     difference = tau[i] - tau_J_d[i]
         #     tau_rate_limited[i] = tau_J_d[i] + np.clip(difference, -self.delta_tau_max, self.delta_tau_max)
+        # tau = tau_rate_limited.copy()
         
         # Now apply peak torque limits based on Doosan A0509 specs
         limit_factor = 0.9
@@ -98,7 +98,7 @@ class StaticImpedanceControl(Robot):
     def calc_friction_torque(self):
         motor_torque = self.Robot_RT_State.actual_motor_torque
         joint_torque = self.Robot_RT_State.actual_joint_torque
-        q_dot = 0.0174532925 * self.Robot_RT_State.actual_joint_velocity_abs  # convert from deg/s to rad/s
+        q_dot = 0.0174532925 * self.Robot_RT_State.actual_joint_velocity   # convert from deg/s to rad/s
 
         term_1 = np.dot(self.K_o, (motor_torque - joint_torque - self.tau_f)) * 0.001
         term_2 = np.dot(self.K_o, np.dot(self.J_m, (self.q_dot_prev - q_dot)))
@@ -228,6 +228,7 @@ if __name__ == "__main__":
 
     except rospy.ROSInterruptException:
         pass
+
     finally:
         plt.close('all')  # Clean up plots on exit
 

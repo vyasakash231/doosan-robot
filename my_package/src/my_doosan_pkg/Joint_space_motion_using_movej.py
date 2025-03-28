@@ -74,7 +74,7 @@ if __name__ == "__main__":
     # p1= posj(0,0,90,0,90,0)  # posj(q1, q2, q3, q4, q5, q6) This function designates the joint space angle in degrees
     # movej(p1, vel=40, acc=20)
 
-    p1= posj(0,0,60,0,45,0)  # posj(q1, q2, q3, q4, q5, q6) This function designates the joint space angle in degrees
+    p1= posj(0,10,20,30,-10,45)  # posj(q1, q2, q3, q4, q5, q6) This function designates the joint space angle in degrees
     movej(p1, vel=40, acc=20)
     
     rospy.spin()  # To stop the loop and program by pressing ctr + C

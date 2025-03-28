@@ -7,9 +7,8 @@ from basic_import import *
 from scipy.spatial.transform import Rotation
 
 def call_back_func(msg):
+    """\tf only works when used with rviz"""
     T_matrix = np.zeros((6,4,4))
-    #print("==================================================================")
-    # Process the TF messages
     i = 0
     T_e_0 = np.eye(4)
     Homo_matrix = np.eye(4)
@@ -23,13 +22,13 @@ def call_back_func(msg):
         # Print the information
         t = np.array([translation.x, translation.y, translation.z])
         r = Rotation.from_quat([rotation.x, rotation.y, rotation.z, rotation.w])
-        Homo_matrix[:3,:3] = r.as_matrix()
-        Homo_matrix[:3,-1] = t.T
-        T_e_0 = np.dot(T_e_0,Homo_matrix) ## End-effector coord wrt base (0) frame
-
-        T_matrix[i,:,:] = Homo_matrix
+        Homo_matrix[:3,:3] = r.as_matrix()  #  rotation of nth frame wrt to n-1 frame
+        Homo_matrix[:3,-1] = t.T   #  translation of nth frame wrt to n-1 frame
+        T_e_0 = np.dot(T_e_0, Homo_matrix) 
+        T_matrix[i,:,:] = T_e_0  #  rotation of nth frame wrt to base (0th) frame
         i += 1
-    # print(np.round(T_e_0[:3,:3],3),'\n')
+    print(np.round(T_matrix,4),'\n')
+    print("==========================================")
 
 
 def shutdown():
@@ -73,7 +72,7 @@ if __name__ == "__main__":
     #my_subscriber_1 = rospy.Subscriber('/dsr01a0509/joint_states', JointState, call_back_func_1)  # In radian
     # my_subscriber_2 = rospy.Subscriber('/dsr01a0509/state', RobotState, call_back_func_2)  # In degrees
 
-    # my_subscriber = rospy.Subscriber('/tf', TFMessage, call_back_func)  # In degrees
+    my_subscriber = rospy.Subscriber('/tf', TFMessage, call_back_func)  # In degrees
 
     rate = rospy.Rate(10)  # 10 Hz
 
@@ -83,7 +82,7 @@ if __name__ == "__main__":
     # Create a Float64MultiArray message   
     msg = ServoJRTStream()
     msg.pos = [90,0,0,0,0,0]
-    msg.vel = [30,0,0,0,0,0]
+    msg.vel = [20,0,0,0,0,0]
     msg.acc = [10,0,0,0,0,0]
     msg.time = 2.0
 
@@ -95,6 +94,6 @@ if __name__ == "__main__":
     # print(mode)
 
     # print(f"Joint_angles: {get_current_posj()}") # if we pass no referance, it will take referance as base coordinate
-    print(f"End-effector pos: {get_current_posx()[0]}") # if we pass no referance, it will take referance as base coordinate
+    # print(f"End-effector pos: {get_current_posx()[0]}") # if we pass no referance, it will take referance as base coordinate
 
     rospy.spin()  # To stop the loop and program by pressing ctr + C    
