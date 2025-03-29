@@ -5,14 +5,12 @@ sys.dont_write_bytecode = True
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),"../")))
 
 from basic_import import *
-from common_utils import *
-from scipy.spatial.transform import Rotation
+from common_utils import Robot, RealTimePlot
 
 
 class GravityCompensation(Robot):
     def __init__(self):
         self.shutdown_flag = False  
-        self.Robot_RT_State = RT_STATE()
 
         # Initialize the plotter in the main thread
         self.plotter = RealTimePlot()
@@ -50,19 +48,6 @@ class GravityCompensation(Robot):
             while not rospy.is_shutdown() and not self.shutdown_flag:
                 G_torques = self.Robot_RT_State.gravity_torque  # calculate gravitational torque in Nm
                 self.calc_friction_torque() #  estimate frictional torque in Nm
-
-                # q = 0.0174532925 * self.Robot_RT_State.actual_joint_position   # convert deg to rad
-
-                # X, _, _ = self.kinematic_model.FK(q)  # q must be in rad
-
-                # # print("at joint angles: ", self.Robot_RT_State.actual_joint_position, "\n")
-                # # print("from package: ", np.round(self.Robot_RT_State.actual_flange_position, 4), "\n")
-                # alpha, beta, gamma = np.radians(self.Robot_RT_State.actual_flange_position[3:])
-                # mat_1 = self.eulerZYZ_2_matrix(alpha, beta, gamma)
-                # print(np.round(mat_1, 3), "\n")
-                # print(np.round(X, 3))
-                # # print(self.curr_pos, self.curr_ori)
-                # print("==============================================================")
     
                 torque = G_torques + self.fric_torques
                 writedata = TorqueRTStream()

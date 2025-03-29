@@ -2,42 +2,6 @@ import numpy as np
 import numpy.linalg as LA
 from math import *
 
-# epsilon for testing whether a number is close to zero
-_EPS = np.finfo(float).eps * 4.0
-
-# axis sequences for Euler angles
-_NEXT_AXIS = [1, 2, 0, 1]
-
-# map axes strings to/from tuples of inner axis, parity, repetition, frame
-_AXES2TUPLE = {
-    'sxyz': (0, 0, 0, 0),
-    'sxyx': (0, 0, 1, 0),
-    'sxzy': (0, 1, 0, 0),
-    'sxzx': (0, 1, 1, 0),
-    'syzx': (1, 0, 0, 0),
-    'syzy': (1, 0, 1, 0),
-    'syxz': (1, 1, 0, 0),
-    'syxy': (1, 1, 1, 0),
-    'szxy': (2, 0, 0, 0),
-    'szxz': (2, 0, 1, 0),
-    'szyx': (2, 1, 0, 0),
-    'szyz': (2, 1, 1, 0),
-    'rzyx': (0, 0, 0, 1),
-    'rxyx': (0, 0, 1, 1),
-    'ryzx': (0, 1, 0, 1),
-    'rxzx': (0, 1, 1, 1),
-    'rxzy': (1, 0, 0, 1),
-    'ryzy': (1, 0, 1, 1),
-    'rzxy': (1, 1, 0, 1),
-    'ryxy': (1, 1, 1, 1),
-    'ryxz': (2, 0, 0, 1),
-    'rzxz': (2, 0, 1, 1),
-    'rxyz': (2, 1, 0, 1),
-    'rzyz': (2, 1, 1, 1),
-}
-
-_TUPLE2AXES = {v: k for k, v in _AXES2TUPLE.items()}
-
 
 class Robot_KM:
     def __init__(self,n,alpha,a,d,d_nn,DH_params="modified"):
@@ -179,16 +143,45 @@ class Robot_KM:
         Z_cord = np.array([0,O[2,0],O[2,1],O[2,2],O[2,3],O[2,4],O[2,5],P_00[2,0]])
         return X_cord, Y_cord, Z_cord   
     
+    def rot2quat(self, rmat):
+        M = np.asarray(rmat).astype(np.float32)[:3, :3]
+
+        m00 = M[0, 0]
+        m01 = M[0, 1]
+        m02 = M[0, 2]
+        m10 = M[1, 0]
+        m11 = M[1, 1]
+        m12 = M[1, 2]
+        m20 = M[2, 0]
+        m21 = M[2, 1]
+        m22 = M[2, 2]
+
+        # symmetric matrix K
+        K = np.array([
+                    [m00 - m11 - m22, np.float32(0.0), np.float32(0.0), np.float32(0.0)],
+                    [m01 + m10, m11 - m00 - m22, np.float32(0.0), np.float32(0.0)],
+                    [m02 + m20, m12 + m21, m22 - m00 - m11, np.float32(0.0)],
+                    [m21 - m12, m02 - m20, m10 - m01, m00 + m11 + m22],
+                    ])
+        K /= 3.0
+
+        # quaternion is Eigen vector of K that corresponds to largest eigenvalue
+        w, V = np.linalg.eigh(K)
+        inds = np.array([3, 0, 1, 2])
+        q1 = V[inds, np.argmax(w)]
+        if q1[0] < 0.0:
+            np.negative(q1, q1)
+        inds = np.array([1, 2, 3, 0])
+        return q1[inds]
+    
     def FK(self, theta, theta_dot=None, theta_ddot=None, level="pos"):
         theta = theta + self.offset
         
         if level == "pos":
-            R, _, EE_pos = self._transformation_matrix(theta)  # end-effector position
-            # EE_orient = self.rotm2eulxyz(R[-1,:,:])  # end-effector orientation
-            # # EE_orient = self.mat2euler(R[-1,:,:], axes='rzyz')
-            # self.Xe = np.concatenate([1000*EE_pos.reshape(-1), np.degrees(EE_orient)])  # end-effector position
-            # return self.Xe.astype(np.float64), [], []
-            return R[-1,:,:], [], []
+            R, _, EE_pos = self._transformation_matrix(theta)  # end-effector position in meters
+            EE_orient = self.rot2quat(R[-1,:,:])
+            self.Xe = np.concatenate([1e3*EE_pos.reshape(-1), EE_orient])
+            return self.Xe.astype(np.float64), [], []
 
         # if level == "vel":
         #     _,J,_ = self.J(theta)   # only linear velocity

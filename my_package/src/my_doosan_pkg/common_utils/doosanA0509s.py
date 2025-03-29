@@ -1,6 +1,11 @@
 #! /usr/bin/python3
+import os
+import sys
+sys.dont_write_bytecode = True
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),"../")))
+
 from basic_import import *
-from geometry_msgs.msg import Pose, PoseStamped, Twist, Quaternion, TransformStamped
+from .robot_RT_state import RT_STATE
 from Dynamics import Robot_Dynamics, Robot_KM
 
 class Robot(ABC):
@@ -31,6 +36,8 @@ class Robot(ABC):
         self.kinematic_model = Robot_KM(self.n, self.alpha, self.a, self.d, self.d_nn, self.DH_params)
 
         self.is_rt_connected = False
+
+        self.Robot_RT_State = RT_STATE()
         
         # Initialize RT control services
         self.initialize_rt_service_proxies()
@@ -193,7 +200,7 @@ class Robot(ABC):
     def plot_data(self, data):
         pass  
 
-    def eulerZYZ_2_matrix(self, z1_angle, y_angle, z2_angle):
+    def euler2mat(self, euler_angles):  # euler_angles in degrees
         """
         Convert Euler ZYZ rotation angles to a 3D rotation matrix.
         
@@ -205,6 +212,8 @@ class Robot(ABC):
         Returns:
         numpy.ndarray: 3x3 rotation matrix
         """
+        z1_angle, y_angle, z2_angle = np.radians(euler_angles)
+
         # Rotation matrices for individual axes
         Rz1 = np.array([
             [math.cos(z1_angle), -math.sin(z1_angle), 0],
@@ -233,5 +242,67 @@ class Robot(ABC):
         while extrinsic rotations are performed relative to the fixed global coordinate system.
         """
         R = Rz1 @ Ry @ Rz2
-        
         return R
+    
+    def eul2quat(self, euler_angles):
+        rmat = self.euler2mat(euler_angles)
+        M = np.asarray(rmat).astype(np.float32)[:3, :3]
+
+        m00 = M[0, 0]
+        m01 = M[0, 1]
+        m02 = M[0, 2]
+        m10 = M[1, 0]
+        m11 = M[1, 1]
+        m12 = M[1, 2]
+        m20 = M[2, 0]
+        m21 = M[2, 1]
+        m22 = M[2, 2]
+
+        # symmetric matrix K
+        K = np.array([
+                    [m00 - m11 - m22, np.float32(0.0), np.float32(0.0), np.float32(0.0)],
+                    [m01 + m10, m11 - m00 - m22, np.float32(0.0), np.float32(0.0)],
+                    [m02 + m20, m12 + m21, m22 - m00 - m11, np.float32(0.0)],
+                    [m21 - m12, m02 - m20, m10 - m01, m00 + m11 + m22],
+                    ])
+        K /= 3.0
+
+        # quaternion is Eigen vector of K that corresponds to largest eigenvalue
+        w, V = np.linalg.eigh(K)
+        inds = np.array([3, 0, 1, 2])
+        q1 = V[inds, np.argmax(w)]
+        if q1[0] < 0.0:
+            np.negative(q1, q1)
+        inds = np.array([1, 2, 3, 0])
+        return q1[inds]
+    
+    def mat2quat(self, rmat):
+        M = np.asarray(rmat).astype(np.float32)[:3, :3]
+
+        m00 = M[0, 0]
+        m01 = M[0, 1]
+        m02 = M[0, 2]
+        m10 = M[1, 0]
+        m11 = M[1, 1]
+        m12 = M[1, 2]
+        m20 = M[2, 0]
+        m21 = M[2, 1]
+        m22 = M[2, 2]
+
+        # symmetric matrix K
+        K = np.array([
+                    [m00 - m11 - m22, np.float32(0.0), np.float32(0.0), np.float32(0.0)],
+                    [m01 + m10, m11 - m00 - m22, np.float32(0.0), np.float32(0.0)],
+                    [m02 + m20, m12 + m21, m22 - m00 - m11, np.float32(0.0)],
+                    [m21 - m12, m02 - m20, m10 - m01, m00 + m11 + m22],
+                    ])
+        K /= 3.0
+
+        # quaternion is Eigen vector of K that corresponds to largest eigenvalue
+        w, V = np.linalg.eigh(K)
+        inds = np.array([3, 0, 1, 2])
+        q1 = V[inds, np.argmax(w)]
+        if q1[0] < 0.0:
+            np.negative(q1, q1)
+        inds = np.array([1, 2, 3, 0])
+        return q1[inds]

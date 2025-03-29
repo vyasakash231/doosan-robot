@@ -5,14 +5,13 @@ sys.dont_write_bytecode = True
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),"../")))
 
 from basic_import import *
-from common_utils import *
+from common_utils import Robot, RealTimePlot
 from scipy.spatial.transform import Rotation
 
 
 class JointStiffnessControl(Robot):
     def __init__(self):
         self.shutdown_flag = False  
-        self.Robot_RT_State = RT_STATE()
 
         # Initialize the plotter in the main thread
         self.plotter = RealTimePlot()
@@ -103,8 +102,6 @@ class JointStiffnessControl(Robot):
         self.start()
         self.set_compliance_parameters(joint_stiffness)
         tau_task = np.zeros((6,1))
-
-        #rospy.sleep(2.0)  # Give time for initialization
 
         rate = rospy.Rate(self.write_rate)  # 1000 Hz control rate
         

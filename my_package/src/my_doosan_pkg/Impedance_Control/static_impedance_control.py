@@ -5,31 +5,26 @@ sys.dont_write_bytecode = True
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),"../")))
 
 from basic_import import *
-from common_utils import *
+from common_utils import Robot, RealTimePlot
 from scipy.spatial.transform import Rotation
 
 class StaticImpedanceControl(Robot):
     def __init__(self):
         self.shutdown_flag = False  
-        self.Robot_RT_State = RT_STATE()
 
         # Initialize the plotter in the main thread
         self.plotter = RealTimePlot()
         self.plotter.setup_plots_1()
-        
-        # Initialize desired position and orientation variables
-        self.position_d_target = np.zeros(3)
-        self.orientation_d_target = np.array([0.0, 0.0, 0.0, 1.0])  # Quaternion (x, y, z, w)
 
         # Set up target stiffness, damping, and filter parameters
         self.K_cartesian_target = np.eye(6)
         self.K_cartesian_target[:3, :3] *= 300.0  # Translational stiffness
-        self.K_cartesian_target[3:, 3:] *= 300.0   # Rotational stiffness
+        self.K_cartesian_target[3:, 3:] *= 150.0   # Rotational stiffness
         
         # Damping ratio = 1
         self.D_cartesian_target = np.eye(6)
         self.D_cartesian_target[:3, :3] *= 2.0 * np.sqrt(300.0)  # Translational damping
-        self.D_cartesian_target[3:, 3:] *= 2.0 * np.sqrt(300.0)   # Rotational damping
+        self.D_cartesian_target[3:, 3:] *= 2.0 * np.sqrt(150.0)   # Rotational damping
 
         self.filter_params = 0.3  # Parameter filter coefficient
 
@@ -48,13 +43,48 @@ class StaticImpedanceControl(Robot):
         super().__init__()
 
     def start(self):
-        """Initialize controller with current robot state"""
         # Set equilibrium point to current state
         self.position_des = self.Robot_RT_State.actual_flange_position[:3].copy()    # (x, y, z) in mm
-        _angles = self.Robot_RT_State.actual_flange_position[3:]    # (a, b, c) in degrees
-        self.orientation_des = Rotation.from_euler('zyz', _angles, degrees=True).as_quat().copy()   # Convert angles from Euler ZYZ to quaternion Quaternion (x, y, z, w)
+        self.orientation_des = self.eul2quat(self.Robot_RT_State.actual_flange_position[3:].copy())  # Convert angles from Euler ZYZ (in degrees) to quaternion        
         self.q_dot_prev = 0.0174532925 * self.Robot_RT_State.actual_joint_velocity.copy()   # convert from deg/s to rad/s
         rospy.loginfo("CartesianImpedanceController: Controller started")
+
+    @property
+    def current_velocity(self):
+        EE_dot = self.Robot_RT_State.actual_flange_velocity   # (dx, dy, dz, da, db, dc)
+        X_dot = np.zeros(6)
+        X_dot[:3] = 0.001 * EE_dot[:3]   # convert from mm/s to m/s
+        X_dot[3:] = 0.0174532925 * EE_dot[3:]  # convert from deg/s to rad/s  
+        return X_dot
+
+    @property
+    def position_error(self):
+        # actual robot flange position w.r.t. base coordinates: (x, y, z, a, b, c), where (a, b, c) follows Euler ZYZ notation [mm, deg]
+        current_position = self.Robot_RT_State.actual_flange_position[:3]     #  (x, y, z) in mm
+        return 0.001 * (current_position - self.position_des)  # convert from mm to m
+    
+    @property
+    def orientation_error(self):
+        current_orientation = self.eul2quat(self.Robot_RT_State.actual_flange_position[3:])   # Convert angles from Euler ZYZ (in degrees) to quaternion        
+
+        if np.dot(current_orientation, self.orientation_des) < 0.0:
+            current_orientation = -current_orientation
+        
+        current_rotation = Rotation.from_quat(current_orientation)  # default order: [x,y,z,w]
+        desired_rotation = Rotation.from_quat(self.orientation_des)  # default order: [x,y,z,w]
+        
+        # Compute the "difference" quaternion (q_error = q_current^-1 * q_desired)
+        """https://math.stackexchange.com/questions/3572459/how-to-compute-the-orientation-error-between-two-3d-coordinate-frames"""
+        error_rotation = current_rotation.inv() * desired_rotation
+        error_quat = error_rotation.as_quat()  # default order: [x,y,z,w]
+        
+        # Extract x, y, z components of error quaternion
+        rot_error = error_quat[:3][:, np.newaxis]
+        
+        # Transform orientation error to base frame
+        current_rotation_matrix = current_rotation.as_matrix()  # Assuming this returns a 3x3 rotation matrix
+        rot_error = current_rotation_matrix @ rot_error
+        return rot_error.reshape(-1)
 
     def set_compliance_parameters(self, translational_stiffness, rotational_stiffness):
         # Update stiffness matrix
@@ -96,8 +126,8 @@ class StaticImpedanceControl(Robot):
             rospy.logwarn(f"Error adding plot data: {e}")
 
     def calc_friction_torque(self):
-        motor_torque = self.Robot_RT_State.actual_motor_torque
-        joint_torque = self.Robot_RT_State.actual_joint_torque
+        motor_torque = self.Robot_RT_State.actual_motor_torque   # in Nm
+        joint_torque = self.Robot_RT_State.actual_joint_torque   # in Nm
         q_dot = 0.0174532925 * self.Robot_RT_State.actual_joint_velocity   # convert from deg/s to rad/s
 
         term_1 = np.dot(self.K_o, (motor_torque - joint_torque - self.tau_f)) * 0.001
@@ -109,60 +139,26 @@ class StaticImpedanceControl(Robot):
     def run_controller(self, K_trans, K_rot):
         self.start()
         self.set_compliance_parameters(K_trans, K_rot)
-        self.current_velocity = np.zeros(6)
         tau_task = np.zeros((6,1))
 
         rate = rospy.Rate(self.write_rate)  # 1000 Hz control rate
         
         try:
             while not rospy.is_shutdown() and not self.shutdown_flag:
-                # actual robot flange position w.r.t. base coordinates: (x, y, z, a, b, c), where (a, b, c) follows Euler ZYZ notation [mm, deg]
-                self.current_position = self.Robot_RT_State.actual_flange_position[:3]     #  (x, y, z) in mm
-                current_velocity = self.Robot_RT_State.actual_flange_velocity     #  (dx, dy, dz, da, db, dc)
-                
-                # # Convert angles from Euler ZYZ to quaternion
-                # _angles = self.Robot_RT_State.actual_flange_position[3:]    # (a, b, c) in deg
-                # self.current_orientation = Rotation.from_euler('zyz', _angles, degrees=True).as_quat()  # Quaternion (x, y, z, w)
-
                 # Find Jacobian matrix
                 J = self.Robot_RT_State.jacobian_matrix
 
-                """we could also use the following function to get the Jacobian matrix"""
-                # q = 0.0174532925 * self.Robot_RT_State.actual_joint_position   # convert deg to rad
-                # J, _, _ = self.kinematic_model.J(q)
-
-                self.current_velocity[:3] = 0.001 * current_velocity[:3]   # convert from mm/s to m/s
-                self.current_velocity[3:] = 0.0174532925 * current_velocity[3:]  # convert from deg/s to rad/s
-
-                # Position error
+                # define EE-Position & Orientation error in task-space
                 error = np.zeros(6)
-                error[:3] = 0.001 * (self.current_position - self.position_des)  # convert from mm to m
+                error[:3] = self.position_error
+                error[3:] = self.orientation_error
 
-                # # Orientation error (using quaternions)
-                # # Ensure quaternion dot product is positive (shortest path)
-                # if np.dot(self.current_orientation, self.orientation_des) < 0.0:
-                #     current_orientation_adj = -self.current_orientation
-                # else:
-                #     current_orientation_adj = self.current_orientation.copy()
-
-                # # Convert quaternions to rotation matrices for error computation
-                # current_rotation = Rotation.from_quat([current_orientation_adj[0], current_orientation_adj[1], 
-                #                                     current_orientation_adj[2], current_orientation_adj[3]])
-                # desired_rotation = Rotation.from_quat([self.orientation_des[0], self.orientation_des[1], 
-                #                                     self.orientation_des[2], self.orientation_des[3]])
-                
-                # # "difference" quaternion
-                # error_rotation = desired_rotation * current_rotation.inv()
-                # error_quat = error_rotation.as_quat()
-                # error[3:] = error_quat[:3]  # Extract (x, y, z) from quaternion
-                
-                # # Transform orientation error to base frame
-                # current_rotation_matrix = current_rotation.as_matrix()
-                # error[3:] = - 0.0174533 * (current_rotation_matrix @ error[3:])
+                # EE-velocity in task-space
+                current_velocity = self.current_velocity
 
                 # Compute control
-                tau_task = - J.T @ (self.K_cartesian @ error[:, np.newaxis] + self.D_cartesian @ self.current_velocity[:, np.newaxis])  
-                
+                tau_task = - J.T @ (self.K_cartesian @ error[:, np.newaxis] + self.D_cartesian @ current_velocity[:, np.newaxis])  
+
                 # compute gravitational torque in Nm
                 G_torque = self.Robot_RT_State.gravity_torque 
 
@@ -185,21 +181,21 @@ class StaticImpedanceControl(Robot):
 
                 self.tau_J_d = tau_d.copy()
 
-                # Calculate error magnitude (for position components only)
-                error_magnitude = np.linalg.norm(error[:3])
+                # # Calculate error magnitude (for position components only)
+                # error_magnitude = np.linalg.norm(error[:3])
 
-                # You can tune these parameters based on your system
-                base_filter = self.filter_params
-                max_filter = 0.9  # Maximum filter value
-                error_threshold = 0.01  # Error threshold in meters
-                scale = min(1.0, error_magnitude / error_threshold)  # Normalized error, capped at 1.0
+                # # You can tune these parameters based on your system
+                # base_filter = self.filter_params
+                # max_filter = 0.9  # Maximum filter value
+                # error_threshold = 0.01  # Error threshold in meters
+                # scale = min(1.0, error_magnitude / error_threshold)  # Normalized error, capped at 1.0
 
-                # Adjust filter parameter based on error
-                adaptive_filter = base_filter + (max_filter - base_filter) * scale
+                # # Adjust filter parameter based on error
+                # adaptive_filter = base_filter + (max_filter - base_filter) * scale
 
-                # # Update parameters with adaptive filtering
-                self.K_cartesian = (adaptive_filter * self.K_cartesian_target + (1.0 - adaptive_filter) * self.K_cartesian)
-                self.D_cartesian = (adaptive_filter * self.D_cartesian_target + (1.0 - adaptive_filter) * self.D_cartesian)
+                # # # Update parameters with adaptive filtering
+                # self.K_cartesian = (adaptive_filter * self.K_cartesian_target + (1.0 - adaptive_filter) * self.K_cartesian)
+                # self.D_cartesian = (adaptive_filter * self.D_cartesian_target + (1.0 - adaptive_filter) * self.D_cartesian)
 
                 rate.sleep()
                 
@@ -218,7 +214,7 @@ if __name__ == "__main__":
         rospy.sleep(2.0)  # Give time for initialization
 
         # Start controller in a separate thread
-        controller_thread = Thread(target=task.run_controller, args=(50.0, 300.0))  # translation stiff -> N/m, rotational stiffness -> Nm/rad 
+        controller_thread = Thread(target=task.run_controller, args=(150.0, 10.0))  # translation stiff -> N/m, rotational stiffness -> Nm/rad 
         controller_thread.daemon = True
         controller_thread.start()
         
