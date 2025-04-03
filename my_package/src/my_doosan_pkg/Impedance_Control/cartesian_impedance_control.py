@@ -16,18 +16,8 @@ class CartesianImpedanceControl(Robot):
         # Initialize the plotter in the main thread
         self.plotter = RealTimePlot()
         self.plotter.setup_plots_1()
-
-        # Set up target stiffness, damping, and filter parameters
-        self.K_cartesian_target = np.eye(6)
-        self.K_cartesian_target[:3, :3] *= 100.0  # Translational stiffness
-        self.K_cartesian_target[3:, 3:] *= 100.0   # Rotational stiffness
         
-        # Damping ratio = 1
-        self.D_cartesian_target = np.eye(6)
-        self.D_cartesian_target[:3, :3] *= 2.0 * np.sqrt(100.0)  # Translational damping
-        self.D_cartesian_target[3:, 3:] *= 2.0 * np.sqrt(100.0)   # Rotational damping
-        
-        self.filter_params = 0.4  # Parameter filter coefficient
+        self.filter_params = 0.75  # Parameter filter coefficient
 
         self.J_m = np.diag([0.0004956, 0.0004956, 0.0001839, 0.00009901, 0.00009901, 0.00009901])
         self.K_o = np.diag([0.1, 0.1, 0.2, 0.15, 0.25, 0.4])
@@ -50,18 +40,52 @@ class CartesianImpedanceControl(Robot):
     def start(self):
         """Initialize controller with current robot state"""
         # Set equilibrium point to current state
-        self.position_des = 0.001 * self.Robot_RT_State.actual_flange_position[:3].copy()    # (x, y, z) convert from mm to m
-        # _angles = self.Robot_RT_State.actual_flange_position[3:]    # (a, b, c) in degrees
-        # self.orientation_des = Rotation.from_euler('zyz', _angles, degrees=True).as_quat().copy()  # Convert angles from Euler ZYZ to quaternion Quaternion (x, y, z, w)
+        # self.position_des = np.array([200.0, 0.0, 600.0])   # (x, y, z) in mm
+        self.position_des = self.Robot_RT_State.actual_flange_position[:3].copy()    # (x, y, z) in mm
+        self.orientation_des = self.eul2quat(self.Robot_RT_State.actual_flange_position[3:].copy())  # Convert angles from Euler ZYZ (in degrees) to quaternion        
         
-        self.position_des_target = 0.001 * np.array([200.0, 0.0, 500.0])   # (x, y, z) convert from mm to m
-        # self.orientation_des_target = Rotation.from_euler('zyz', _angles, degrees=True).as_quat().copy()   # Convert angles from Euler ZYZ to quaternion Quaternion (x, y, z, w)
+        self.position_des_target = np.array([200.0, 0.0, 600.0])   # (x, y, z) in mm
+        # self.orientation_des_target = self.eul2quat(self.Robot_RT_State.actual_flange_position[3:].copy())  # Convert angles from Euler ZYZ (in degrees) to quaternion        
         
         self.q_dot_prev = 0.0174532925 * self.Robot_RT_State.actual_joint_velocity.copy()   # Previous joint velocity (convert from deg/s to rad/s)
-
-        # Set nullspace equilibrium configuration to initial joint positions
-        self.q_d_nullspace = 0.0174532925 * self.Robot_RT_State.actual_joint_velocity.copy() 
         rospy.loginfo("CartesianImpedanceController: Controller started")
+
+    @property
+    def current_velocity(self):
+        EE_dot = self.Robot_RT_State.actual_flange_velocity   # (dx, dy, dz, da, db, dc)
+        X_dot = np.zeros(6)
+        X_dot[:3] = 0.001 * EE_dot[:3]   # convert from mm/s to m/s
+        X_dot[3:] = 0.0174532925 * EE_dot[3:]  # convert from deg/s to rad/s  
+        return X_dot
+
+    @property
+    def position_error(self):
+        # actual robot flange position w.r.t. base coordinates: (x, y, z, a, b, c), where (a, b, c) follows Euler ZYZ notation [mm, deg]
+        current_position = self.Robot_RT_State.actual_flange_position[:3]     #  (x, y, z) in mm
+        return 0.001 * (current_position - self.position_des)  # convert from mm to m
+    
+    @property
+    def orientation_error(self):
+        current_orientation = self.eul2quat(self.Robot_RT_State.actual_flange_position[3:])   # Convert angles from Euler ZYZ (in degrees) to quaternion        
+
+        if np.dot(current_orientation, self.orientation_des) < 0.0:
+            current_orientation = -current_orientation
+        
+        current_rotation = Rotation.from_quat(current_orientation)  # default order: [x,y,z,w]
+        desired_rotation = Rotation.from_quat(self.orientation_des)  # default order: [x,y,z,w]
+        
+        # Compute the "difference" quaternion (q_error = q_current^-1 * q_desired)
+        """https://math.stackexchange.com/questions/3572459/how-to-compute-the-orientation-error-between-two-3d-coordinate-frames"""
+        error_rotation = current_rotation.inv() * desired_rotation
+        error_quat = error_rotation.as_quat()  # default order: [x,y,z,w]
+        
+        # Extract x, y, z components of error quaternion
+        rot_error = error_quat[:3][:, np.newaxis]
+        
+        # Transform orientation error to base frame
+        current_rotation_matrix = current_rotation.as_matrix()  # Assuming this returns a 3x3 rotation matrix
+        rot_error = current_rotation_matrix @ rot_error
+        return rot_error.reshape(-1)
 
     def set_compliance_parameters(self, translational_stiffness, rotational_stiffness):
         # Update stiffness matrix
@@ -74,22 +98,20 @@ class CartesianImpedanceControl(Robot):
         self.D_cartesian[:3, :3] *= 2.0 * np.sqrt(translational_stiffness)
         self.D_cartesian[3:, 3:] *= 2.0 * np.sqrt(rotational_stiffness)
 
-        self.K_nullspace = 10.0
-
     def saturate_torque(self, tau, tau_J_d):
         """
         Limit both the torque rate of change and peak torque values for Doosan A0509 robot
         """
-        # First limit rate of change as in your original function
+        # # First limit rate of change as in your original function
         # tau_rate_limited = np.zeros(self.n)
         # for i in range(len(tau)):
         #     difference = tau[i] - tau_J_d[i]
         #     tau_rate_limited[i] = tau_J_d[i] + np.clip(difference, -self.delta_tau_max, self.delta_tau_max)
         # tau = tau_rate_limited.copy()
-
+        
         # Now apply peak torque limits based on Doosan A0509 specs
         limit_factor = 0.9
-        max_torque_limits = limit_factor * np.array([190.0, 190.0, 190.0, 40.0, 40.0, 40.0])  # Nm
+        max_torque_limits = limit_factor * np.array([190.0, 190.0, 190.0, 40.0, 40.0, 40.0]) # Nm
 
         if tau.ndim == 2:
             tau = tau.reshape(-1)
@@ -113,8 +135,8 @@ class CartesianImpedanceControl(Robot):
         return Mx
 
     def calc_friction_torque(self):
-        motor_torque = self.Robot_RT_State.actual_motor_torque
-        joint_torque = self.Robot_RT_State.actual_joint_torque
+        motor_torque = self.Robot_RT_State.actual_motor_torque   # in Nm
+        joint_torque = self.Robot_RT_State.actual_joint_torque   # in Nm
         q_dot = 0.0174532925 * self.Robot_RT_State.actual_joint_velocity   # convert from deg/s to rad/s
 
         term_1 = np.dot(self.K_o, (motor_torque - joint_torque - self.tau_f)) * 0.001
@@ -125,47 +147,31 @@ class CartesianImpedanceControl(Robot):
     def run_controller(self, K_trans, K_rot):
         self.start()
         self.set_compliance_parameters(K_trans, K_rot)
-        self.current_velocity = np.zeros(6)
         tau_task = np.zeros((6,1))
 
         rate = rospy.Rate(self.write_rate)  # 1000 Hz control rate
 
         try:
             while not rospy.is_shutdown() and not self.shutdown_flag:
-                # actual robot flange position w.r.t. base coordinates: (x, y, z, a, b, c), where (a, b, c) follows Euler ZYZ notation [mm, deg]
-                self.current_position = 0.001 * self.Robot_RT_State.actual_flange_position[:3]     #  (x, y, z) convert from mm to m
-                current_velocity = self.Robot_RT_State.actual_flange_velocity     #  (dx, dy, dz, da, db, dc)
-
-                # Convert angles from Euler ZYZ to quaternion
-                # _angles = self.Robot_RT_State.actual_flange_position[3:]    # (a, b, c) in degrees
-                # self.current_orientation = Rotation.from_euler('zyz', _angles, degrees=True).as_quat()  # Quaternion (x, y, z, w)
-
-                self.current_velocity[:3] = 0.001 * current_velocity[:3]   # convert from mm/s to m/s
-                self.current_velocity[3:] = 0.0174532925 * current_velocity[3:]  # convert from deg/s to rad/s
-
                 # Find Jacobian matrix
                 J = self.Robot_RT_State.jacobian_matrix
-                Mq = self.Robot_RT_State.mass_matrix
+                # Mq = self.Robot_RT_State.mass_matrix
 
-                # Position error
+                # define EE-Position & Orientation error in task-space
                 error = np.zeros(6)
-                error[:3] = self.current_position - self.position_des
+                error[:3] = self.position_error
+                error[3:] = self.orientation_error
 
-                print(1000*self.current_position, 1000*self.position_des_target)
+                print(np.linalg.norm(error[:3]))
 
-                q = 0.0174532925 * self.Robot_RT_State.actual_joint_position   # convert from deg to rad
-                q_dot = 0.0174532925 * self.Robot_RT_State.actual_joint_velocity   # convert from deg/s to rad/s
+                # EE-velocity in task-space
+                current_velocity = self.current_velocity
 
-                # # dynamically consistent generalized inverse
-                Mx = self.Mx(Mq, J)
-                J_pinv_T = Mx @ J @ np.linalg.inv(Mx)
-                nullspace_proj = np.eye(6) - J.T @ J_pinv_T
-                tau_nullspace = nullspace_proj @ (self.K_nullspace * (self.q_d_nullspace - q)[:, np.newaxis]) #- 1.0 * np.sqrt(self.K_nullspace) * q_dot[:, np.newaxis])
+                # q = 0.0174532925 * self.Robot_RT_State.actual_joint_position   # convert from deg to rad
+                # q_dot = 0.0174532925 * self.Robot_RT_State.actual_joint_velocity   # convert from deg/s to rad/s
 
-                # Compute control
                 # Cartesian PD control with damping
-                # tau_task = - J.T @ (self.K_cartesian @ error[:, np.newaxis] + self.D_cartesian @ self.current_velocity[:, np.newaxis])
-                tau_task = - J.T @ (self.K_cartesian @ error[:, np.newaxis] + self.D_cartesian @ (J @ q_dot[:, np.newaxis]))
+                tau_task = - J.T @ (self.K_cartesian @ error[:, np.newaxis] + self.D_cartesian @ current_velocity[:, np.newaxis])
                         
                 # compute gravitational torque in Nm
                 G_torque = self.Robot_RT_State.gravity_torque 
@@ -178,7 +184,7 @@ class CartesianImpedanceControl(Robot):
                 self.calc_friction_torque()
 
                 # Compute desired torque
-                tau_d = tau_task + G_torque[:, np.newaxis] + tau_nullspace
+                tau_d = tau_task + G_torque[:, np.newaxis] + self.tau_f[:, np.newaxis]
                 
                 # Saturate torque to avoid limit breach
                 tau_d = self.saturate_torque(tau_d, self.tau_J_d)
@@ -190,12 +196,8 @@ class CartesianImpedanceControl(Robot):
 
                 self.tau_J_d = tau_d.copy()
 
-                # Update parameters with filtering
-                self.K_cartesian = (self.filter_params * self.K_cartesian_target + (1.0 - self.filter_params) * self.K_cartesian)
-                self.D_cartesian = (self.filter_params * self.D_cartesian_target + (1.0 - self.filter_params) * self.D_cartesian)
-
                 # Update desired position and orientation with filtering
-                self.position_des = (self.filter_params * self.position_des_target + (1.0 - self.filter_params) * self.position_des)
+                self.position_des = (self.filter_params * self.position_des_target + (1.0 - self.filter_params) * self.position_des)   # (x, y, z) in mm
                 # self.orientation_des = quat_slerp(self.orientation_des, self.orientation_des_target, self.filter_params)   # Spherical linear interpolation for orientation
                 
                 rate.sleep()
@@ -215,7 +217,7 @@ if __name__ == "__main__":
         rospy.sleep(2.0)  # Give time for initialization
 
         # Start controller in a separate thread
-        controller_thread = Thread(target=task.run_controller, args=(5.0, 5.0))  # translation stiff -> N/m, rotational stiffness -> Nm/rad 
+        controller_thread = Thread(target=task.run_controller, args=(150.0, 100.0))  # translation stiff -> N/m, rotational stiffness -> Nm/rad 
         controller_thread.daemon = True
         controller_thread.start()
         

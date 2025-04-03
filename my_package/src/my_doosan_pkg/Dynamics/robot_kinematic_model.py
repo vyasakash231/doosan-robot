@@ -180,7 +180,7 @@ class Robot_KM:
         if level == "pos":
             R, _, EE_pos = self._transformation_matrix(theta)  # end-effector position in meters
             EE_orient = self.rot2quat(R[-1,:,:])
-            self.Xe = np.concatenate([1e3*EE_pos.reshape(-1), EE_orient])
+            self.Xe = np.concatenate([1e3*EE_pos.reshape(-1), EE_orient])  # [meters, quaternions]
             return self.Xe.astype(np.float64), [], []
 
         # if level == "vel":

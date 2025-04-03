@@ -165,11 +165,13 @@ class StaticImpedanceControl(Robot):
                 # estimate frictional torque in Nm
                 self.calc_friction_torque()
             
-                # Compute desired torque
-                if np.linalg.norm(error[:3]) > 0.001:
-                    tau_d = tau_task + G_torque[:, np.newaxis] + self.tau_f[:, np.newaxis]
-                else:
-                    tau_d = G_torque[:, np.newaxis] + self.tau_f[:, np.newaxis]
+                # # Compute desired torque
+                # if np.linalg.norm(error[:3]) > 0.001:
+                #     tau_d = tau_task + G_torque[:, np.newaxis] + self.tau_f[:, np.newaxis]
+                # else:
+                #     tau_d = G_torque[:, np.newaxis] + self.tau_f[:, np.newaxis]
+
+                tau_d = tau_task + G_torque[:, np.newaxis] + self.tau_f[:, np.newaxis]
 
                 # Saturate torque to avoid limit breach
                 tau_d = self.saturate_torque(tau_d, self.tau_J_d)
@@ -214,7 +216,7 @@ if __name__ == "__main__":
         rospy.sleep(2.0)  # Give time for initialization
 
         # Start controller in a separate thread
-        controller_thread = Thread(target=task.run_controller, args=(150.0, 10.0))  # translation stiff -> N/m, rotational stiffness -> Nm/rad 
+        controller_thread = Thread(target=task.run_controller, args=(200.0, 50.0))  # translation stiff -> N/m, rotational stiffness -> Nm/rad 
         controller_thread.daemon = True
         controller_thread.start()
         

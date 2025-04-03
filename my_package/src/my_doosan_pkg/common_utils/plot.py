@@ -66,8 +66,9 @@ class RealTimePlot:
         self.axs[3].set_ylabel('Joint Torque Sensor Data (Nm)', fontsize=8)
 
         # Create lines with custom colors
+        forces = ['Fx', 'Fy', 'Fz', 'Mx', 'My', 'Mz']
         self.motor_lines = [self.axs[0].plot([], [], label=f'Joint {i+1}', color=self.colors[i], linewidth=1.5)[0] for i in range(6)]
-        self.fts_lines = [self.axs[1].plot([], [], label=f'Axis {i+1}', color=self.colors[i], linewidth=1.5)[0] for i in range(6)]
+        self.fts_lines = [self.axs[1].plot([], [], label=f' {forces[i]}', color=self.colors[i], linewidth=1.5)[0] for i in range(6)]
         self.est_joint_lines = [self.axs[2].plot([], [], label=f'Joint {i+1}', color=self.colors[i], linewidth=1.5)[0] for i in range(6)]
         self.sensor_joint_lines = [self.axs[3].plot([], [], label=f'Joint {i+1}', color=self.colors[i], linewidth=1.5)[0] for i in range(6)]
 

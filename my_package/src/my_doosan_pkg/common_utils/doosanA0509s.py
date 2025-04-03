@@ -6,7 +6,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),"../")))
 
 from basic_import import *
 from .robot_RT_state import RT_STATE
-from Dynamics import Robot_Dynamics, Robot_KM
+from Dynamics import Robot_KM
 
 class Robot(ABC):
     n = 6  # No of joints
@@ -19,20 +19,6 @@ class Robot(ABC):
     DH_params="modified"
 
     def __init__(self):
-        # kinematic_property = {'dof':self.n, 'alpha':self.alpha, 'a':self.a, 'd':self.d, 'd_nn':self.d_nn}
-        
-        # # Dyanamic ParametersX_cord
-        # mass = np.array([3.72, 6.84, 2.77, 2.68, 2.05, 0.87])  # in Kg
-        # COG_wrt_body = [np.array([[-0.00069], [0.24423], [1.48125]]), 
-        #                 np.array([[0.0], [1.3271], [3.59986]]), 
-        #                 np.array([[0.00071], [0.33009], [5.69623]]), 
-        #                 np.array([[-0.00086], [0.86348], [8.45469]]),
-        #                 np.array([[0.00091], [0.15434], [9.37957]]),
-        #                 np.array([[-0.00022], [-0.00007], [10.07754]])]  # location of COG wrt to DH-frame / body frame
-        # MOI_about_body_CG = []  # MOI of the link about COG 
-
-        # self.dynamic_model = Robot_Dynamics(kinematic_property, mass, COG_wrt_body, MOI_about_body_CG, file_name="doosan_a0509s")
-
         self.kinematic_model = Robot_KM(self.n, self.alpha, self.a, self.d, self.d_nn, self.DH_params)
 
         self.is_rt_connected = False
@@ -45,11 +31,11 @@ class Robot(ABC):
         self.my_publisher = rospy.Publisher('/dsr01a0509/stop', RobotStop, queue_size=10)
         
         # Real-time data Publisher --> rospy.Publisher(topic_name, message_type, queue_size)
-        self.speedj_publisher = rospy.Publisher('/dsr01a0509/speedj_rt_stream', SpeedJRTStream, queue_size=10)        
-        self.speedl_publisher = rospy.Publisher('/dsr01a0509/servol_rt_stream', ServoLRTStream, queue_size=10)         
-        self.torque_publisher = rospy.Publisher('/dsr01a0509/torque_rt_stream', TorqueRTStream, queue_size=10)  
+        self.speedj_publisher = rospy.Publisher('/dsr01a0509/speedj_rt_stream', SpeedJRTStream, queue_size=10)    # SpeedJRTStream -> Topic message that controls the joint velocity from an external controller.
+        self.speedl_publisher = rospy.Publisher('/dsr01a0509/servoj_rt_stream', ServoJRTStream, queue_size=10)    # ServoJRTStream -> Topic message that controls the joint position from an external controller.   
+        self.torque_publisher = rospy.Publisher('/dsr01a0509/torque_rt_stream', TorqueRTStream, queue_size=10)    # TorqueRTStream -> Topic message that controls the motor torque from an external controller.
 
-        self.RT_observer_client = rospy.ServiceProxy('/dsr01a0509/realtime/read_data_rt', ReadDataRT)  
+        self.RT_observer_client = rospy.ServiceProxy('/dsr01a0509/realtime/read_data_rt', ReadDataRT)    # This function reads the real-time output data from the robot controller.
 
         self.read_rate = 3000 # in Hz (0.333 ms)
         self.write_rate = 1000 # in Hz (1 ms)
@@ -65,12 +51,12 @@ class Robot(ABC):
             service_timeout = 3.0
             services = [
                 ('/dsr01a0509/system/set_robot_mode', SetRobotMode),
-                ('/dsr01a0509/realtime/connect_rt_control', ConnectRTControl),
-                ('/dsr01a0509/realtime/set_rt_control_input', SetRTControlInput),
-                ('/dsr01a0509/realtime/set_rt_control_output', SetRTControlOutput),
-                ('/dsr01a0509/realtime/start_rt_control', StartRTControl),
-                ('/dsr01a0509/realtime/stop_rt_control', StopRTControl),
-                ('/dsr01a0509/realtime/disconnect_rt_control', DisconnectRTControl),
+                ('/dsr01a0509/realtime/connect_rt_control', ConnectRTControl),   # This service connects to robot controller via Real-time External Control.
+                ('/dsr01a0509/realtime/set_rt_control_input', SetRTControlInput),    # This service set the input data (external controller →  robot controller) communication configuration supported by real-time external control.
+                ('/dsr01a0509/realtime/set_rt_control_output', SetRTControlOutput),    # This service set the output data (robot controller →  external controller) communication configuration supported by real-time external control.
+                ('/dsr01a0509/realtime/start_rt_control', StartRTControl),    # Starts sending/receiving the set input/output data.
+                ('/dsr01a0509/realtime/stop_rt_control', StopRTControl),     # Finishes sending/receiving the set input/output data.
+                ('/dsr01a0509/realtime/disconnect_rt_control', DisconnectRTControl),    # This service disconnects real-time external control.
             ]
 
             # Wait for all services with timeout
@@ -244,38 +230,6 @@ class Robot(ABC):
         R = Rz1 @ Ry @ Rz2
         return R
     
-    def eul2quat(self, euler_angles):
-        rmat = self.euler2mat(euler_angles)
-        M = np.asarray(rmat).astype(np.float32)[:3, :3]
-
-        m00 = M[0, 0]
-        m01 = M[0, 1]
-        m02 = M[0, 2]
-        m10 = M[1, 0]
-        m11 = M[1, 1]
-        m12 = M[1, 2]
-        m20 = M[2, 0]
-        m21 = M[2, 1]
-        m22 = M[2, 2]
-
-        # symmetric matrix K
-        K = np.array([
-                    [m00 - m11 - m22, np.float32(0.0), np.float32(0.0), np.float32(0.0)],
-                    [m01 + m10, m11 - m00 - m22, np.float32(0.0), np.float32(0.0)],
-                    [m02 + m20, m12 + m21, m22 - m00 - m11, np.float32(0.0)],
-                    [m21 - m12, m02 - m20, m10 - m01, m00 + m11 + m22],
-                    ])
-        K /= 3.0
-
-        # quaternion is Eigen vector of K that corresponds to largest eigenvalue
-        w, V = np.linalg.eigh(K)
-        inds = np.array([3, 0, 1, 2])
-        q1 = V[inds, np.argmax(w)]
-        if q1[0] < 0.0:
-            np.negative(q1, q1)
-        inds = np.array([1, 2, 3, 0])
-        return q1[inds]
-    
     def mat2quat(self, rmat):
         M = np.asarray(rmat).astype(np.float32)[:3, :3]
 
@@ -306,3 +260,10 @@ class Robot(ABC):
             np.negative(q1, q1)
         inds = np.array([1, 2, 3, 0])
         return q1[inds]
+    
+    def eul2quat(self, euler_angles):
+        rmat = self.euler2mat(euler_angles)
+        M = np.asarray(rmat).astype(np.float32)
+        q = self.mat2quat(M)
+        return q
+    

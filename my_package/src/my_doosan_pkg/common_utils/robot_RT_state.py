@@ -4,20 +4,20 @@ import numpy as np
 class RT_STATE:
     def __init__(self):
         self.time_stamp = 0.0
-        self.actual_joint_position = np.zeros(6)
-        self.actual_joint_velocity = np.zeros(6)
-        self.actual_joint_position_abs = np.zeros(6)
-        self.actual_joint_velocity_abs = np.zeros(6)
-        self.actual_tcp_position = np.zeros(6)   # (Tool Center Point) is the specific point on the attached tool that is used to define the precise location where the robot should interact with an object
-        self.actual_tcp_velocity = np.zeros(6)
+        self.actual_joint_position = np.zeros(6)  # actual joint position from incremental encoder at motor side(used for control) [deg]
+        self.actual_joint_velocity = np.zeros(6)  # actual joint velocity from incremental encoder at motor side [deg/s]
+        self.actual_joint_position_abs = np.zeros(6)  # actual joint position from absolute encoder at link side (used for exact link position) [deg]
+        self.actual_joint_velocity_abs = np.zeros(6)  # actual joint velocity from absolute encoder at link side [deg/s]
+        self.actual_tcp_position = np.zeros(6)   # (Tool Center Point) actual robot tcp position w.r.t. base coordinates: (x, y, z, a, b, c), where (a, b, c) follows Euler ZYZ notation [mm, deg]
+        self.actual_tcp_velocity = np.zeros(6)   # actual robot tcp velocity w.r.t. base coordinates [mm, deg/s]
         self.actual_flange_position = np.zeros(6)   # refers to the location of the mounting plate at the end of the robot's wrist, where tools are attached
         self.actual_flange_velocity = np.zeros(6)
-        self.actual_motor_torque = np.zeros(6)
-        self.actual_joint_torque = np.zeros(6)
-        self.raw_joint_torque = np.zeros(6)
-        self.raw_force_torque = np.zeros(6)
-        self.external_joint_torque = np.zeros(6)
-        self.external_tcp_force = np.zeros(6)
+        self.actual_motor_torque = np.zeros(6)   # actual motor torque applying gear ratio = gear_ratio * current2torque_constant * motor current [Nm]
+        self.actual_joint_torque = np.zeros(6)   # estimated joint torque by robot controller [Nm]
+        self.raw_joint_torque = np.zeros(6)   # calibrated joint torque sensor data [Nm]
+        self.raw_force_torque = np.zeros(6)   # calibrated force torque sensor data w.r.t. flange coordinates [N, Nm]
+        self.external_joint_torque = np.zeros(6)   # estimated external joint torque [Nm]
+        self.external_tcp_force = np.zeros(6)    # estimated tcp force w.r.t. base coordinates [N, Nm]
         self.target_joint_position = np.zeros(6)
         self.target_joint_velocity = np.zeros(6)
         self.target_joint_acceleration = np.zeros(6)
@@ -37,9 +37,9 @@ class RT_STATE:
             self.actual_joint_velocity[i] = data.actual_joint_velocity[i]
             self.actual_joint_position_abs[i] = data.actual_joint_position_abs[i]
             self.actual_joint_velocity_abs[i] = data.actual_joint_velocity_abs[i]
-            self.actual_tcp_position[i] = data.actual_tcp_position[i]   #  (X, Y, Z, A, B, C), where (A, B, C) follows Euler ZYZ notation [mm, deg]
+            self.actual_tcp_position[i] = data.actual_tcp_position[i] 
             self.actual_tcp_velocity[i] = data.actual_tcp_velocity[i]
-            self.actual_flange_position[i] = data.actual_flange_position[i]   #  (x, y, z)
+            self.actual_flange_position[i] = data.actual_flange_position[i] 
             self.actual_flange_velocity[i] = data.actual_flange_velocity[i]
             self.actual_motor_torque[i] = data.actual_motor_torque[i]
             self.actual_joint_torque[i] = data.actual_joint_torque[i]

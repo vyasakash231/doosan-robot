@@ -8,7 +8,7 @@ import time
 import threading  # Threads are a way to run multiple tasks concurrently within a single process. By using threads, you can perform multiple operations simultaneously, which can be useful for tasks like handling asynchronous events, running background tasks.
 import sys
 sys.dont_write_bytecode = True
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),"../../../common/imp"))) # get import path : DSR_ROBOT.py 
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),"../../../../common/imp"))) # get import path : DSR_ROBOT.py 
 
 import DR_init  # at doosan-robot/common/imp/
 DR_init.__dsr__id = "dsr01"
@@ -34,8 +34,8 @@ def call_back_func_3(msg):
     Homo_matrix = np.eye(4)
     for transform in msg.transforms:
         # Extract relevant information from the message
-        frame_id = transform.header.frame_id
-        child_frame_id = transform.child_frame_id
+        # frame_id = transform.header.frame_id
+        # child_frame_id = transform.child_frame_id
         translation = transform.transform.translation
         rotation = transform.transform.rotation
 
@@ -62,8 +62,6 @@ def shutdown():
     return 
 
 def call_back_func_1(msg):
-    response = check_button()  # Call the service, no request data needed
-    print(response.state)
     pos_list = [round(i,4) for i in list(msg.position)]
     #print(f"Joint_angles in radian: {pos_list}")
 
@@ -108,9 +106,6 @@ if __name__ == "__main__":
     set_robot_mode_proxy  = rospy.ServiceProxy('/dsr01a0509/system/set_robot_mode', SetRobotMode)
     set_robot_mode_proxy(ROBOT_MODE_MANUAL)  # Calls the service proxy and pass the args:robot_mode, to set the robot mode to ROBOT_MODE_MANUAL.
 
-
-    check_button = rospy.ServiceProxy('/dsr01a0509/system/get_buttons_state', GetButtonsState)
-
     # Creates a publisher on the topic '/dsr01a0509/stop' to publish RobotStop messages with a queue size of 10.         
     my_publisher = rospy.Publisher('/dsr01a0509/stop', RobotStop, queue_size=10)  
 
@@ -120,7 +115,7 @@ if __name__ == "__main__":
     (1) /dsr01a0509/joint_states  -->  gives joint angles as position in radian
     (2) /dsr01a0509/state  -->  gives complete info of robot and joint angle as current_posj in degree
     """ 
-    # my_subscriber_1 = rospy.Subscriber('/dsr01a0509/joint_states', JointState, call_back_func_1)  # In radian
+    my_subscriber_1 = rospy.Subscriber('/dsr01a0509/joint_states', JointState, call_back_func_1)  # In radian
     # my_subscriber_2 = rospy.Subscriber('/dsr01a0509/state', RobotState, call_back_func_2)  # In degrees
 
     # my_subscriber_3 = rospy.Subscriber('/tf', TFMessage, call_back_func_3)  # In degrees
