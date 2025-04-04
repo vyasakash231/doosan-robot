@@ -6,7 +6,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),"../")))
 
 from basic_import import *
 from .robot_RT_state import RT_STATE
-from Dynamics import Robot_KM
+from .robot_kinematic_model import Robot_KM
 
 class Robot(ABC):
     n = 6  # No of joints

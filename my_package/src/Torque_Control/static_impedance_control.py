@@ -73,7 +73,7 @@ class StaticImpedanceControl(Robot):
         current_rotation = Rotation.from_quat(current_orientation)  # default order: [x,y,z,w]
         desired_rotation = Rotation.from_quat(self.orientation_des)  # default order: [x,y,z,w]
         
-        # Compute the "difference" quaternion (q_error = q_current^-1 * q_desired)
+        # Compute the "difference" or quaternion_distance (q_error = q_current^-1 * q_desired)
         """https://math.stackexchange.com/questions/3572459/how-to-compute-the-orientation-error-between-two-3d-coordinate-frames"""
         error_rotation = current_rotation.inv() * desired_rotation
         error_quat = error_rotation.as_quat()  # default order: [x,y,z,w]

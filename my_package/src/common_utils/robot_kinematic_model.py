@@ -171,42 +171,66 @@ class Robot_KM:
         q1 = V[inds, np.argmax(w)]
         if q1[0] < 0.0:
             np.negative(q1, q1)
-        inds = np.array([1, 2, 3, 0])
+        inds = np.array([1, 2, 3, 0])  # order -> (x,y,z,w) 
         return q1[inds]
+    
+    def _skew4x4(self, z):
+        mat = np.zeros((4,4))
+
+        mat[0,1:] = -z  # [-ωx,-ωy,-ωz]
+        mat[1:,0] = z  # [ωx,ωy,ωz]
+        mat[1,2] = z[2]  # ωz
+        mat[1,3] = -z[1]  # -ωy
+        mat[2,1] = -z[2]  # -ωz
+        mat[2,3] = z[0]  # ωx
+        mat[3,1] = z[1]  # ωy
+        mat[3,2] = -z[0]  # -ωx
+        return mat
     
     def FK(self, theta, theta_dot=None, theta_ddot=None, level="pos"):
         theta = theta + self.offset
         
         if level == "pos":
-            R, _, EE_pos = self._transformation_matrix(theta)  # end-effector position in meters
-            EE_orient = self.rot2quat(R[-1,:,:])
-            self.Xe = np.concatenate([1e3*EE_pos.reshape(-1), EE_orient])  # [meters, quaternions]
+            R, _, EE_pos = self._transformation_matrix(theta)
+            EE_quat = self.rot2quat(R[-1,:,:])   # quaternion (x,y,z,w)
+            self.Xe = np.concatenate([1e3*EE_pos.reshape(-1), EE_quat])  # end-effector pose [(X,Y,Z) -> meters, (x,y,z,w) -> quaternions]
+            
             return self.Xe.astype(np.float64), [], []
 
-        # if level == "vel":
-        #     _,J,_ = self.J(theta)   # only linear velocity
+        if level == "vel":
+            R, _, EE_pos = self._transformation_matrix(theta)
+            EE_quat = self.rot2quat(R[-1,:,:])  # quaternion (x,y,z,w)
+            self.Xe = np.concatenate([1e3*EE_pos.reshape(-1), EE_quat])  # end-effector pose [(X,Y,Z) -> meters, (x,y,z,w) -> quaternions]
 
-        #     if theta_dot.ndim != 2:
-        #         theta_dot = theta_dot.reshape((self.n, 1))
+            J,_,_ = self.J(theta)   # Jacobian (6xn)
+            
+            if theta_dot.ndim != 2:
+                theta_dot = theta_dot[:,np.newaxis]
+            
+            Xe_dot = J @ theta_dot   # end-effector velocity [(Vx,Vy,Vz) -> meters/s, (ωx,ωy,ωz) -> rad/s]
+            
+            """Q_dot = 0.5 * Ω(ω) * Q, where Q_dot is the quaternion derivative which depends on the angular velocity ω"""
+            # omega = Xe_dot[3:].reshape(-1)
+            # EE_quat_dot = 0.5 * self._skew4x4(omega) @ EE_quat[:,np.newaxis]  # (dx,dy,dz,dw)
+            # Xe_dot = np.concatenate([Xe_dot[:3].reshape(-1), EE_quat_dot.reshape(-1)])   # end-effector velocity [(Vx,Vy,Vz) -> meters/s, (dx,dy,dz,dw)]
 
-        #     Xe_dot = J @ theta_dot   # end-effector velocity
-        #     _, _, P_00 = self._transformation_matrix(theta)  # end-effector position
-        #     self.Xe = np.array([P_00[[0],0],P_00[[1],0],P_00[[2],0]])  # end-effector position
-        #     return self.Xe.astype(np.float64), Xe_dot.astype(np.float64), []
+            return self.Xe.astype(np.float64), Xe_dot.astype(np.float64), []
         
         # if level == "acc":
-        #     _,J,_ = self.J(theta)   # only linear velocity
+        #     R, _, EE_pos = self._transformation_matrix(theta)
+        #     EE_quat = self.rot2quat(R[-1,:,:])  # quaternion (x,y,z,w)
+        #     self.Xe = np.concatenate([1e3*EE_pos.reshape(-1), EE_quat])  # end-effector pose [(X,Y,Z) -> meters, (x,y,z,w) -> quaternions]
 
-        #     _,J_dot,_ = self.J_dot(theta, theta_dot)
+        #     J,_,_ = self.J(theta)   # Jacobian (6xn)
+        #     J_dot,_,_ = self.J_dot(theta, theta_dot)   # Jacobian_dot (6xn)
 
         #     if theta_dot.ndim != 2:
-        #         theta_dot = theta_dot.reshape((self.n, 1))
+        #         theta_dot = theta_dot[:, np.newaxis]
         #     if theta_ddot.ndim != 2:
-        #         theta_ddot = theta_ddot.reshape((self.n, 1))
+        #         theta_ddot = theta_ddot[:,np.newaxis]
 
-        #     Xe_dot = J @ theta_dot    # end-effector velocity
-        #     Xe_ddot = J @ theta_ddot + J_dot @ theta_dot    # end-effector acceleration
-        #     _, _, P_00 = self._transformation_matrix(theta)  # end-effector position
-        #     self.Xe = np.array([P_00[[0],0],P_00[[1],0],P_00[[2],0]])  # end-effector position
+        #     Xe_dot = J @ theta_dot    # end-effector velocity [(Vx,Vy,Vz) -> meters/s, (ωx,ωy,ωz) -> rad/s]
+        #     Xe_ddot = J @ theta_ddot + J_dot @ theta_dot    # end-effector acceleration  [(Ax,Ay,Az) -> meters/s^2, (ωx_dot,ωy_ot,ωz_dot) -> rad/s^2]
+            
         #     return self.Xe.astype(np.float64), Xe_dot.astype(np.float64), Xe_ddot.astype(np.float64)  
 
