@@ -58,7 +58,7 @@ class Robot_KM:
         P_00 = O[:,[-1]] + np.dot(R[-1,:,:], self.d_nn)
         return  R, O, P_00
 
-    def J(self, theta):
+    def Jacobian(self, theta):
         theta = theta + self.offset
         R, O, O_E = self._transformation_matrix(theta)
 
@@ -79,7 +79,7 @@ class Robot_KM:
         jacobian = np.concatenate((Jz,Jw),axis=0)
         return jacobian.astype(np.float64), Jz.astype(np.float64), Jw.astype(np.float64)
 
-    def J_dot(self, theta, theta_dot, H=None):
+    def Jacobian_dot(self, theta, theta_dot, H=None):
         theta = theta + self.offset
 
         """ https://doi.org/10.48550/arXiv.2207.01794 """

@@ -85,6 +85,30 @@ class StaticImpedanceControl(Robot):
         current_rotation_matrix = current_rotation.as_matrix()  # Assuming this returns a 3x3 rotation matrix
         rot_error = current_rotation_matrix @ rot_error
         return rot_error.reshape(-1)
+    
+    @property
+    def q_ddot(self):
+        Mq = self.Robot_RT_State.mass_matrix
+        C = self.Robot_RT_State.coriolis_matrix
+        G = self.Robot_RT_State.gravity_torque
+
+        if abs(np.linalg.det(Mq)) >= 1e-3:
+            Mq_inv = np.linalg.inv(Mq)
+        else:
+            Mq_inv = np.linalg.pinv(Mq)
+
+        q_dot = 0.0174532925 * self.Robot_RT_State.actual_joint_velocity   # convert deg/s to rad/s
+        q_ddot = Mq_inv @ (tau - C @ q_dot[:, np.newaxis] - G)
+        return q_ddot.reshape(-1)
+    
+    @property
+    def current_acceleration(self):
+        q = 0.0174532925 * self.Robot_RT_State.actual_joint_position   # convert deg to rad
+        q_dot = 0.0174532925 * self.Robot_RT_State.actual_joint_velocity   # convert deg/s to rad/s
+        J = self.kinematic_mode.Jacobian(q)
+        J_dot = self.kinematic_model.Jacobian_dot(q, q_dot)
+
+        X_ddot = J_dot @ q_dot[:, np.newaxis] + J @ self.q_ddot[:, np.newaxis]
 
     def set_compliance_parameters(self, translational_stiffness, rotational_stiffness):
         # Update stiffness matrix
@@ -147,6 +171,8 @@ class StaticImpedanceControl(Robot):
             while not rospy.is_shutdown() and not self.shutdown_flag:
                 # Find Jacobian matrix
                 J = self.Robot_RT_State.jacobian_matrix
+                # q = 0.0174532925 * self.Robot_RT_State.actual_joint_position   # convert deg to rad
+                # J = self.kinematic_mode.Jacobian(q)
 
                 # define EE-Position & Orientation error in task-space
                 error = np.zeros(6)
