@@ -76,9 +76,9 @@ class Robot(ABC):
             self.stop_rt_control = rospy.ServiceProxy(services[5][0], services[5][1])
             self.disconnect_rt_control = rospy.ServiceProxy(services[6][0], services[6][1])
 
-            self.joint_vel_limits = rospy.ServiceProxy('/dsr01a0509/realtime/set_velj_rt', SetVelJRT)   # The global joint velocity is set in (deg/sec)
+            self.joint_vel_limits = rospy.ServiceProxy('/dsr01a0509/realtime/set_velj_rt', SetVelJRT)   # The global joint speed is set in (deg/sec)
             self.joint_acc_limits = rospy.ServiceProxy('/dsr01a0509/realtime/set_accj_rt', SetAccJRT)  # The global joint acceleration is set in (deg/sec^2)
-            self.ee_vel_limits = rospy.ServiceProxy('/dsr01a0509/realtime/set_velx_rt', SetVelXRT)   # This function sets the velocity of the task space motion globally in (mm/sec)
+            self.ee_vel_limits = rospy.ServiceProxy('/dsr01a0509/realtime/set_velx_rt', SetVelXRT)   # This function sets the global task velocity in (mm/sec, deg/s)
             self.ee_acc_limits = rospy.ServiceProxy('/dsr01a0509/realtime/set_accx_rt', SetAccXRT)
 
             self.connect_to_rt_control()
@@ -98,14 +98,14 @@ class Robot(ABC):
 
             connect_req = ConnectRTControlRequest()
             connect_req.ip_address = "192.168.137.100"
-            connect_req.port = 12347
+            connect_req.port = 12347   
             connect_response = self.connect_rt_control(connect_req)
             if not connect_response.success:
                 raise Exception("Failed to connect RT control")
             
             set_output_req = SetRTControlOutputRequest()
-            set_output_req.period = 0.001
-            set_output_req.loss = 4
+            set_output_req.period = 0.001   # Communication Period (sec). Range: 0.001~1 [sec]
+            set_output_req.loss = 4    # In succession, if the input data or the servo control command is lost due to over the set count, the real-time control connection is disconnected.
             set_output_response = self.set_rt_control_output(set_output_req)
             if not set_output_response.success:
                 raise Exception("Failed to set RT control output")
@@ -172,7 +172,8 @@ class Robot(ABC):
                 response = self.RT_observer_client(request)
 
                 # Plot Data
-                self.plot_data(response.data)
+                self.data = response.data
+                self.plot_data()
                 
                 # Store Real-Time data
                 self.Robot_RT_State.store_data(response.data)
@@ -183,7 +184,7 @@ class Robot(ABC):
             rate.sleep()
 
     @abstractmethod   # Force child classes to implement this method
-    def plot_data(self, data):
+    def plot_data(self):
         pass  
 
     def euler2mat(self, euler_angles):  # euler_angles in degrees

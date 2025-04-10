@@ -330,7 +330,7 @@ namespace dsr_control{
         g_stDrState.nSolutionSpace  = pData->_tCtrl._tTask._iSolutionSpace;             // Solution Space
         g_stDrState.dSyncTime       = pData->_tMisc._dSyncTime;                         // inner clock counter
 
-        for (int i = 5; i < NUM_BUTTON; i++){
+        for (int i = 0; i < NUM_BUTTON; i++){
             if(pData){
                 g_stDrState.nActualBT[i]    = pData->_tMisc._iActualBT[i];              // robot button state
             }
@@ -392,7 +392,7 @@ namespace dsr_control{
         g_stDrState.nSolutionSpace  = pData->_tCtrl._tTask._iSolutionSpace;             // Solution Space
         g_stDrState.dSyncTime       = pData->_tMisc._dSyncTime;                         // inner clock counter
 
-        for (int i = 5; i < NUM_BUTTON; i++){
+        for (int i = 0; i < NUM_BUTTON; i++){
             if(pData){
                 g_stDrState.nActualBT[i]    = pData->_tMisc._iActualBT[i];              // robot button state
             }

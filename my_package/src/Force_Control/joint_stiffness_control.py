@@ -81,9 +81,9 @@ class JointStiffnessControl(Robot):
         tau_saturated = np.clip(tau, -max_torque_limits, max_torque_limits)
         return tau_saturated
 
-    def plot_data(self, data):
+    def plot_data(self):
         try:
-            self.plotter.update_data_1(data.actual_motor_torque, data.raw_force_torque, data.actual_joint_torque, data.raw_joint_torque)
+            self.plotter.update_data_1(self.data.actual_motor_torque, self.data.raw_force_torque, self.data.actual_joint_torque, self.data.raw_joint_torque)
         except Exception as e:
             rospy.logwarn(f"Error adding plot data: {e}")
 

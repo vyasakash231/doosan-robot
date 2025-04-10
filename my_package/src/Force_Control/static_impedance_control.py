@@ -44,14 +44,14 @@ class StaticImpedanceControl(Robot):
 
     def start(self):
         # Set equilibrium point to current state
-        self.position_des = self.Robot_RT_State.actual_flange_position[:3].copy()    # (x, y, z) in mm
-        self.orientation_des = self.eul2quat(self.Robot_RT_State.actual_flange_position[3:].copy())  # Convert angles from Euler ZYZ (in degrees) to quaternion        
+        self.position_des = self.Robot_RT_State.actual_tcp_position[:3].copy()   # (x, y, z) in mm
+        self.orientation_des = self.eul2quat(self.Robot_RT_State.actual_tcp_position[3:].copy())  # Convert angles from Euler ZYZ (in degrees) to quaternion        
         self.q_dot_prev = 0.0174532925 * self.Robot_RT_State.actual_joint_velocity.copy()   # convert from deg/s to rad/s
         rospy.loginfo("CartesianImpedanceController: Controller started")
 
     @property
     def current_velocity(self):
-        EE_dot = self.Robot_RT_State.actual_flange_velocity   # (dx, dy, dz, da, db, dc)
+        EE_dot = self.Robot_RT_State.actual_tcp_velocity   # (dx, dy, dz, da, db, dc)
         X_dot = np.zeros(6)
         X_dot[:3] = 0.001 * EE_dot[:3]   # convert from mm/s to m/s
         X_dot[3:] = 0.0174532925 * EE_dot[3:]  # convert from deg/s to rad/s  
@@ -59,13 +59,13 @@ class StaticImpedanceControl(Robot):
 
     @property
     def position_error(self):
-        # actual robot flange position w.r.t. base coordinates: (x, y, z, a, b, c), where (a, b, c) follows Euler ZYZ notation [mm, deg]
-        current_position = self.Robot_RT_State.actual_flange_position[:3]     #  (x, y, z) in mm
+        # actual TCP position w.r.t. base coordinates: (x, y, z, a, b, c), where (a, b, c) follows Euler ZYZ notation [mm, deg]
+        current_position = self.Robot_RT_State.actual_tcp_position[:3]     #  (x, y, z) in mm
         return 0.001 * (current_position - self.position_des)  # convert from mm to m
     
     @property
     def orientation_error(self):
-        current_orientation = self.eul2quat(self.Robot_RT_State.actual_flange_position[3:])   # Convert angles from Euler ZYZ (in degrees) to quaternion        
+        current_orientation = self.eul2quat(self.Robot_RT_State.actual_tcp_position[3:])   # Convert angles from Euler ZYZ (in degrees) to quaternion        
 
         if np.dot(current_orientation, self.orientation_des) < 0.0:
             current_orientation = -current_orientation
@@ -86,29 +86,29 @@ class StaticImpedanceControl(Robot):
         rot_error = current_rotation_matrix @ rot_error
         return rot_error.reshape(-1)
     
-    @property
-    def q_ddot(self):
-        Mq = self.Robot_RT_State.mass_matrix
-        C = self.Robot_RT_State.coriolis_matrix
-        G = self.Robot_RT_State.gravity_torque
+    # @property
+    # def q_ddot(self):
+    #     Mq = self.Robot_RT_State.mass_matrix
+    #     C = self.Robot_RT_State.coriolis_matrix
+    #     G = self.Robot_RT_State.gravity_torque
 
-        if abs(np.linalg.det(Mq)) >= 1e-3:
-            Mq_inv = np.linalg.inv(Mq)
-        else:
-            Mq_inv = np.linalg.pinv(Mq)
+    #     if abs(np.linalg.det(Mq)) >= 1e-3:
+    #         Mq_inv = np.linalg.inv(Mq)
+    #     else:
+    #         Mq_inv = np.linalg.pinv(Mq)
 
-        q_dot = 0.0174532925 * self.Robot_RT_State.actual_joint_velocity   # convert deg/s to rad/s
-        q_ddot = Mq_inv @ (tau - C @ q_dot[:, np.newaxis] - G)
-        return q_ddot.reshape(-1)
+    #     q_dot = 0.0174532925 * self.Robot_RT_State.actual_joint_velocity   # convert deg/s to rad/s
+    #     q_ddot = Mq_inv @ (tau - C @ q_dot[:, np.newaxis] - G)
+    #     return q_ddot.reshape(-1)
     
-    @property
-    def current_acceleration(self):
-        q = 0.0174532925 * self.Robot_RT_State.actual_joint_position   # convert deg to rad
-        q_dot = 0.0174532925 * self.Robot_RT_State.actual_joint_velocity   # convert deg/s to rad/s
-        J = self.kinematic_mode.Jacobian(q)
-        J_dot = self.kinematic_model.Jacobian_dot(q, q_dot)
+    # @property
+    # def current_acceleration(self):
+    #     q = 0.0174532925 * self.Robot_RT_State.actual_joint_position   # convert deg to rad
+    #     q_dot = 0.0174532925 * self.Robot_RT_State.actual_joint_velocity   # convert deg/s to rad/s
+    #     J = self.kinematic_mode.Jacobian(q)
+    #     J_dot = self.kinematic_model.Jacobian_dot(q, q_dot)
 
-        X_ddot = J_dot @ q_dot[:, np.newaxis] + J @ self.q_ddot[:, np.newaxis]
+    #     X_ddot = J_dot @ q_dot[:, np.newaxis] + J @ self.q_ddot[:, np.newaxis]
 
     def set_compliance_parameters(self, translational_stiffness, rotational_stiffness):
         # Update stiffness matrix
@@ -143,9 +143,9 @@ class StaticImpedanceControl(Robot):
         tau_saturated = np.clip(tau, -max_torque_limits, max_torque_limits)
         return tau_saturated
 
-    def plot_data(self, data):
+    def plot_data(self):
         try:
-            self.plotter.update_data_1(data.actual_motor_torque, data.raw_force_torque, data.actual_joint_torque, data.raw_joint_torque)
+            self.plotter.update_data_1(self.data.actual_motor_torque, self.data.raw_force_torque, self.data.actual_joint_torque, self.data.raw_joint_torque)
         except Exception as e:
             rospy.logwarn(f"Error adding plot data: {e}")
 
@@ -172,7 +172,7 @@ class StaticImpedanceControl(Robot):
                 # Find Jacobian matrix
                 J = self.Robot_RT_State.jacobian_matrix
                 # q = 0.0174532925 * self.Robot_RT_State.actual_joint_position   # convert deg to rad
-                # J = self.kinematic_mode.Jacobian(q)
+                # J, _, _ = self.kinematic_mode.Jacobian(q)
 
                 # define EE-Position & Orientation error in task-space
                 error = np.zeros(6)
@@ -191,12 +191,7 @@ class StaticImpedanceControl(Robot):
                 # estimate frictional torque in Nm
                 self.calc_friction_torque()
             
-                # # Compute desired torque
-                # if np.linalg.norm(error[:3]) > 0.001:
-                #     tau_d = tau_task + G_torque[:, np.newaxis] + self.tau_f[:, np.newaxis]
-                # else:
-                #     tau_d = G_torque[:, np.newaxis] + self.tau_f[:, np.newaxis]
-
+                # Compute desired torque
                 tau_d = tau_task + G_torque[:, np.newaxis] + self.tau_f[:, np.newaxis]
 
                 # Saturate torque to avoid limit breach
@@ -208,22 +203,6 @@ class StaticImpedanceControl(Robot):
                 self.torque_publisher.publish(writedata)
 
                 self.tau_J_d = tau_d.copy()
-
-                # # Calculate error magnitude (for position components only)
-                # error_magnitude = np.linalg.norm(error[:3])
-
-                # # You can tune these parameters based on your system
-                # base_filter = self.filter_params
-                # max_filter = 0.9  # Maximum filter value
-                # error_threshold = 0.01  # Error threshold in meters
-                # scale = min(1.0, error_magnitude / error_threshold)  # Normalized error, capped at 1.0
-
-                # # Adjust filter parameter based on error
-                # adaptive_filter = base_filter + (max_filter - base_filter) * scale
-
-                # # # Update parameters with adaptive filtering
-                # self.K_cartesian = (adaptive_filter * self.K_cartesian_target + (1.0 - adaptive_filter) * self.K_cartesian)
-                # self.D_cartesian = (adaptive_filter * self.D_cartesian_target + (1.0 - adaptive_filter) * self.D_cartesian)
 
                 rate.sleep()
                 
@@ -242,7 +221,7 @@ if __name__ == "__main__":
         rospy.sleep(2.0)  # Give time for initialization
 
         # Start controller in a separate thread
-        controller_thread = Thread(target=task.run_controller, args=(200.0, 50.0))  # translation stiff -> N/m, rotational stiffness -> Nm/rad 
+        controller_thread = Thread(target=task.run_controller, args=(150.0, 50.0))  # translation stiff -> N/m, rotational stiffness -> Nm/rad 
         controller_thread.daemon = True
         controller_thread.start()
         

@@ -19,6 +19,23 @@ class RealTimePlot:
         self.max_points = max_points
         self.times = deque(maxlen=max_points)
 
+        # Joint velocities data
+        self.joint_velocities = []
+        self.joint_vel_lines = []
+        self.joint_fig = None
+        self.joint_axes = None
+        
+        # Task space velocities data - sensor and calculated
+        self.task_velocities_sensor = []  # List of deques for sensor data
+        self.task_velocities_calc = []    # List of deques for calculated data
+        self.task_vel_lines_sensor = []   # Lines for sensor data
+        self.task_vel_lines_calc = []     # Lines for calculated data
+        self.task_fig = None
+        self.task_axes = []  # List of axes for subplots
+        
+        # Labels for task space velocity plots
+        self.task_labels = ['v_x', 'v_y', 'v_z', 'ω_x', 'ω_y', 'ω_z']
+
         # Colors for the lines
         self.colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
         
@@ -122,96 +139,65 @@ class RealTimePlot:
 
     '''%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%'''
 
-    def setup_plots_2(self):
-        self.fig = plt.figure(figsize=(10, 12))
-        gs = gridspec.GridSpec(2, 2)
+    def setup_task_plot(self):
+        self.task_fig, axes = plt.subplots(2, 3, figsize=(15, 8))
+        self.task_axes = axes.flatten()  # Flatten for easier access
         
-        self.axs = []
-        self.axs.append(self.fig.add_subplot(gs[0,0]))
-        self.axs.append(self.fig.add_subplot(gs[1,0]))
-        self.axs.append(self.fig.add_subplot(gs[0,1]))
-        self.axs.append(self.fig.add_subplot(gs[1,1]))
-
-        plt.subplots_adjust(hspace=0.3)
-
-        # Initialize data storage
-        self.motor_torque = [deque(maxlen=self.max_points) for _ in range(6)]
-        self.tcp_forces = [deque(maxlen=self.max_points) for _ in range(6)]
-        self.row_ft_data = [deque(maxlen=self.max_points) for _ in range(6)]        
-        self.joint_error_data = [deque(maxlen=self.max_points) for _ in range(6)]   
-
-        # Enable double buffering
-        self.fig.canvas.draw()
-
-        # Show the plot
-        plt.show(block=False)
-        self.fig.canvas.flush_events()
-
-        # Common settings for all axes
-        for ax, title in zip(self.axs,['Actual Motor Torque', 'TCP Force', 'Raw FTS Data', 'Joint Error']): 
-            ax.set_title(title, pad=10, fontsize=10)
-            ax.grid(True, linestyle='--', alpha=0.7)
-            ax.set_xlabel('Time (s)', fontsize=8)
-            
-        self.axs[0].set_ylabel('Torque (Nm)', fontsize=8)
-        self.axs[1].set_ylabel('Force (N)', fontsize=8)
-        self.axs[2].set_ylabel('Force & Torque (N, Nm)', fontsize=8)
-        self.axs[3].set_ylabel('Joint Error (deg)', fontsize=8)
-
-        # Create lines with custom colors
-        self.motor_lines = [self.axs[0].plot([], [], label=f'Joint {i+1}', color=self.colors[i], linewidth=1.5)[0] for i in range(6)]
-        self.tcp_lines = [self.axs[1].plot([], [], label=f'Axis {i+1}', color=self.colors[i], linewidth=1.5)[0] for i in range(6)]
-        self.fts_lines = [self.axs[2].plot([], [], label=f'Axis {i+1}', color=self.colors[i], linewidth=1.5)[0] for i in range(6)]
-        self.error_lines = [self.axs[3].plot([], [], label=f'Axis {i+1}', color=self.colors[i], linewidth=1.5)[0] for i in range(6)]
-
-        # Add legends
-        for ax in self.axs:
-            ax.legend(loc='upper left', fontsize=8, ncol=2)
-
-    def update_data_2(self, actual_motor_torque, external_tcp_force, raw_force_torque, joint_errors):
-        current_time = time.time()
-        
-        # Limit update rate
-        if current_time - self.last_update_time < self.update_interval:
-            return
-            
-        plot_time = current_time - self.start_time
-        self.times.append(plot_time)
-        
-        # Update data
+        # Initialize data for each velocity component (sensor and calculated)
         for i in range(6):
-            self.motor_torque[i].append(actual_motor_torque[i])
-            self.tcp_forces[i].append(external_tcp_force[i])
-            self.row_ft_data[i].append(raw_force_torque[i])
-            self.joint_error_data[i].append(joint_errors[i])
-
-        # Convert deques to lists for plotting
-        x_data = list(self.times)
+            # Sensor data
+            self.task_velocities_sensor.append(deque(maxlen=self.max_points))
+            sensor_line, = self.task_axes[i].plot([], [], 'r-', label='Sensor')
+            self.task_vel_lines_sensor.append(sensor_line)
+            
+            # Calculated data
+            self.task_velocities_calc.append(deque(maxlen=self.max_points))
+            calc_line, = self.task_axes[i].plot([], [], 'g--', label='Calculated')
+            self.task_vel_lines_calc.append(calc_line)
+            
+            # Configure subplot
+            self.task_axes[i].set_xlabel('Time (s)')
+            self.task_axes[i].set_title(f'{self.task_labels[i]}')
+            self.task_axes[i].grid(True)
+            self.task_axes[i].legend(loc='upper right')
+            
+            # Set y-axis labels
+            if i < 3:  # Linear velocities
+                self.task_axes[i].set_ylabel('Velocity (m/s)')
+            else:  # Angular velocities
+                self.task_axes[i].set_ylabel('Angular Velocity (rad/s)')
         
-        # Update all lines
+        self.task_fig.suptitle('Task Space Velocities', fontsize=16)
+        plt.tight_layout()
+
+    def update_task_data(self, sensor_velocities, calc_velocities=None):  # velocity: [v_x, v_y, v_z, omega_x, omega_y, omega_z]
+        # Record time 
+        if self.start_time is None:
+            self.start_time = time.time()
+        
+        current_time = time.time() - self.start_time
+        self.times.append(current_time)
+        
+        # Update velocity data
         for i in range(6):
-            self.motor_lines[i].set_data(x_data, list(self.motor_torque[i]))
-            self.tcp_lines[i].set_data(x_data, list(self.tcp_forces[i]))
-            self.fts_lines[i].set_data(x_data, list(self.row_ft_data[i]))
-            self.error_lines[i].set_data(x_data, list(self.joint_error_data[i]))
-
-        # Update axis limits
-        limit = [70, 100, 150, 100]
-        if len(x_data) > 0:
-            for idx, ax in enumerate(self.axs):
-                ax.set_xlim(max(0, plot_time - 10), plot_time + 0.5)
-                ax.set_ylim(-limit[idx], limit[idx])
-                ax.relim()
-                ax.autoscale_view(scaley=True)
-
-        try:
-            # Use blit for faster rendering
-            self.fig.canvas.draw_idle()
-            self.fig.canvas.flush_events()
-            self.last_update_time = current_time
-        except Exception as e:
-            rospy.logwarn(f"Error updating plot: {e}") 
-
+            self.task_velocities_sensor[i].append(sensor_velocities[i])
+            if calc_velocities is not None:
+                self.task_velocities_calc[i].append(calc_velocities[i])
+        
+        # Update plot lines for both sensor and calculated data
+        for i in range(6):
+            self.task_vel_lines_sensor[i].set_data(list(self.times), list(self.task_velocities_sensor[i]))
+            if calc_velocities is not None:
+                self.task_vel_lines_calc[i].set_data(list(self.times), list(self.task_velocities_calc[i]))
+        
+        # Adjust axes limits for each subplot
+        for i, ax in enumerate(self.task_axes):
+            ax.relim()
+            ax.autoscale_view()
+        
+        # Redraw the figure
+        self.task_fig.canvas.draw_idle()
+        self.task_fig.canvas.flush_events()
 
 
 

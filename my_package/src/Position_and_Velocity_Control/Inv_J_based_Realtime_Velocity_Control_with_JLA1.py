@@ -64,7 +64,7 @@ class Task_Space_Control():
 
         # set_rt_control_output
         drt_setout = rospy.ServiceProxy('/dsr01a0509/realtime/set_rt_control_output',SetRTControlOutput)
-        retval = drt_setout(period = 0.01, loss = 10)  # period = 0.01 (sampling time, here 100Hz),  loss = 10 (unknown, currently unused by doosan firmware)
+        retval = drt_setout(period = 0.001, loss = 5)  # period = 0.001 (sampling time, here 1000Hz),  loss = 5 (unknown, currently unused by doosan firmware)
         if not retval:
             raise SystemExit('realtime set output failed')
         

@@ -41,8 +41,8 @@ class CartesianImpedanceControl(Robot):
         """Initialize controller with current robot state"""
         # Set equilibrium point to current state
         # self.position_des = np.array([200.0, 0.0, 600.0])   # (x, y, z) in mm
-        self.position_des = self.Robot_RT_State.actual_flange_position[:3].copy()    # (x, y, z) in mm
-        self.orientation_des = self.eul2quat(self.Robot_RT_State.actual_flange_position[3:].copy())  # Convert angles from Euler ZYZ (in degrees) to quaternion        
+        self.position_des = self.Robot_RT_State.actual_tcp_position[:3].copy()    # (x, y, z) in mm
+        self.orientation_des = self.eul2quat(self.Robot_RT_State.actual_tcp_position[3:].copy())  # Convert angles from Euler ZYZ (in degrees) to quaternion        
         
         self.position_des_target = np.array([200.0, 0.0, 600.0])   # (x, y, z) in mm
         # self.orientation_des_target = self.eul2quat(self.Robot_RT_State.actual_flange_position[3:].copy())  # Convert angles from Euler ZYZ (in degrees) to quaternion        
@@ -61,12 +61,12 @@ class CartesianImpedanceControl(Robot):
     @property
     def position_error(self):
         # actual robot flange position w.r.t. base coordinates: (x, y, z, a, b, c), where (a, b, c) follows Euler ZYZ notation [mm, deg]
-        current_position = self.Robot_RT_State.actual_flange_position[:3]     #  (x, y, z) in mm
+        current_position = self.Robot_RT_State.actual_tcp_position[:3]     #  (x, y, z) in mm
         return 0.001 * (current_position - self.position_des)  # convert from mm to m
     
     @property
     def orientation_error(self):
-        current_orientation = self.eul2quat(self.Robot_RT_State.actual_flange_position[3:])   # Convert angles from Euler ZYZ (in degrees) to quaternion        
+        current_orientation = self.eul2quat(self.Robot_RT_State.actual_tcp_position[3:])   # Convert angles from Euler ZYZ (in degrees) to quaternion        
 
         if np.dot(current_orientation, self.orientation_des) < 0.0:
             current_orientation = -current_orientation

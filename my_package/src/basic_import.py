@@ -23,7 +23,7 @@ from tf.transformations import *
 from tf2_msgs.msg import TFMessage
 
 sys.dont_write_bytecode = True
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),"../../../common/imp")))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),"../../common/imp")))
 
 import DR_init
 DR_init.__dsr__id = "dsr01"

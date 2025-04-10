@@ -14,7 +14,8 @@ class GravityCompensation(Robot):
 
         # Initialize the plotter in the main thread
         self.plotter = RealTimePlot()
-        self.plotter.setup_plots_1()
+        self.plotter.setup_plots_1()   # to plot torques
+        # self.plotter.setup_task_plot()   # to plot EE-velocities
 
         # Initial estimated frictional torque
         self.fric_torques = np.zeros(self.n)
@@ -24,11 +25,79 @@ class GravityCompensation(Robot):
 
         super().__init__()
 
-    def plot_data(self, data):
+    def _svd_solve(self, M, threshold=1e-10):
+        U, s, V_transp = np.linalg.svd(M)
+
+        # Option-1
+        S_inv = np.diag(s**-1)
+        
+        # # Option-2, Handle small singular values
+        # s_inv = np.zeros_like(s)
+        # for i in range(len(s)):
+        #     if s[i] > threshold:
+        #         s_inv[i] = 1.0 / s[i]
+        #     else:
+        #         s_inv[i] = 0.0  # Or apply damping: s[i]/(s[i]^2 + lambda^2)
+        
+        # # Reconstruct inverse
+        # S_inv = np.zeros_like(M)
+        # for i in range(len(s)):
+        #     S_inv[i,i] = s_inv[i]
+        
+        # M^-1 = V * S^-1 * U^T
+        M_inv = V_transp.T @ S_inv @ U.T   # V = V_transp.T
+        return M_inv
+
+    @property
+    def q_ddot(self):
+        Mq = self.Robot_RT_State.mass_matrix
+        C = self.Robot_RT_State.coriolis_matrix
+        G = self.Robot_RT_State.gravity_torque   # in Nm
+        tau = self.Robot_RT_State.actual_joint_torque   # in Nm
+
+        if abs(np.linalg.det(Mq)) >= 1e-4:
+            # Mq_inv = np.linalg.inv(Mq)
+            Mq_inv = self._svd_solve(Mq)
+        else:
+            Mq_inv = np.linalg.pinv(Mq)
+
+        q_dot = 0.0174532925 * self.Robot_RT_State.actual_joint_velocity   # convert deg/s to rad/s
+        q_ddot = Mq_inv @ (tau[:, np.newaxis] - C @ q_dot[:, np.newaxis] - G[:, np.newaxis])
+        return q_ddot.reshape(-1)  # in rad/s^2
+    
+    @property
+    def current_acceleration(self):
+        q = 0.0174532925 * self.Robot_RT_State.actual_joint_position   # convert deg to rad
+        q_dot = 0.0174532925 * self.Robot_RT_State.actual_joint_velocity   # convert deg/s to rad/s
+        
+        J,_,_ = self.kinematic_model.Jacobian(q)
+        J_dot,_,_ = self.kinematic_model.Jacobian_dot(q, q_dot)
+       
+        X_ddot = J_dot @ q_dot[:, np.newaxis] + J @ self.q_ddot[:, np.newaxis]
+        return X_ddot.reshape(-1)
+
+    def plot_data(self):
         try:
-            self.plotter.update_data_1(data.actual_motor_torque, data.raw_force_torque, data.actual_joint_torque, data.raw_joint_torque)
+            self.plotter.update_data_1(self.data.actual_motor_torque, 
+                                       self.data.raw_force_torque, 
+                                       self.data.actual_joint_torque, 
+                                       self.data.raw_joint_torque)  # external_tcp_force
         except Exception as e:
             rospy.logwarn(f"Error adding plot data: {e}")
+
+    # def plot_data(self):
+    #     X_dot = np.zeros(6)
+    #     try:
+    #         # J = self.Robot_RT_State.jacobian_matrix
+    #         q = 0.0174532925 * self.Robot_RT_State.actual_joint_position   # convert deg to rad
+    #         J, _, _ = self.kinematic_model.Jacobian(q)
+    #         calc_vel = 0.0174532925 * (J @ self.Robot_RT_State.actual_joint_velocity[:, np.newaxis]).reshape(-1)
+
+    #         X_dot[:3] = 0.001 * self.Robot_RT_State.actual_tcp_velocity[:3]   # convert from mm/s to m/s
+    #         X_dot[3:] = 0.0174532925 * self.Robot_RT_State.actual_tcp_velocity[3:]  # convert from deg/s to rad/s  
+    #         self.plotter.update_task_data(X_dot, calc_vel)
+    #     except Exception as e:
+    #         rospy.logwarn(f"Error adding plot data: {e}")
 
     def calc_friction_torque(self):
         motor_torque = self.Robot_RT_State.actual_motor_torque
@@ -48,8 +117,10 @@ class GravityCompensation(Robot):
             while not rospy.is_shutdown() and not self.shutdown_flag:
                 G_torques = self.Robot_RT_State.gravity_torque  # calculate gravitational torque in Nm
                 self.calc_friction_torque() #  estimate frictional torque in Nm
+
+                print(self.q_ddot)
     
-                torque = G_torques + self.fric_torques
+                torque = G_torques #+ self.fric_torques
                 writedata = TorqueRTStream()
                 writedata.tor = torque
                 writedata.time = 0.0
