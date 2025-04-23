@@ -5,30 +5,34 @@ sys.dont_write_bytecode = True
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),"../")))
 
 from basic_import import *
-from pose_transform import quat2euler
-from record_demonstration import DoosanRecord
+from impedance_control import CartesianImpedanceControl
 
 
-class LearningFromDemonstration(DoosanRecord):
-    def __init__(self):
-        self.speedl_publisher = rospy.Publisher('/dsr01a0509/speedl_stream', SpeedlStream, queue_size=10)    # SpeedlStream -> Topic message is the asynchronous motion message, and the next command is executed at the same time the motion begins. 
-        self.servol_publisher = rospy.Publisher('/dsr01a0509/servol_stream', ServolStream, queue_size=10)    # ServolStream -> Topic message is the asynchronous motion message, and the next command is executed at the same time the motion begins.  
-        super().__init__()
+# move to initial position first
+p1= posj(0,25,110,0,45,0)  # posj(q1, q2, q3, q4, q5, q6) This function designates the joint space angle in degrees
+movej(p1, vel=40, acc=20)
 
-    def move_to_pose(self, pos, orient):
-        X = 1000 * pos   # convert m to mm
-        O = quat2euler(orient)  # convert quaternion to euler ZYZ (in degrees)
-        p = posx(X[0], X[1], X[2], O[3], O[4], O[5])  # posx(x, y, z, w, p, r) This function designates the task space in coordinate values.
-        
-        writedata = ServolStream()
-        writedata.pos = p
-        writedata.time = 1.0
-        self.torque_publisher.publish(writedata)
-        
-    def execute_task(self):
-        stiffness = [500.0, 500.0, 500.0, 100.0, 100.0, 100.0]
-        self.set_stiffness(stiffness, 0, 0.0) 
+time.sleep(1.0)
 
-        start_position = self.recorded_trajectory[:,0]
-        start_orientation = self.recorded_orientation[:,0]
-        self.move_to_pose(start_position, start_orientation)
+try:
+    # Initialize ROS node first
+    rospy.init_node('My_service_node')
+    
+    # Create control object
+    task = CartesianImpedanceControl()
+    rospy.sleep(2.0)  # Give time for initialization
+
+    # Start controller in a separate thread
+    controller_thread = Thread(target=task.run_controller, args=(1400.0, 200.0)) # translation stiff -> N/m, rotational stiffness -> Nm/rad 
+    controller_thread.daemon = True
+    controller_thread.start()
+    
+    # Keep the main thread running for the plot
+    while not rospy.is_shutdown():
+        rospy.sleep(0.01)
+
+except rospy.ROSInterruptException:
+    pass
+
+finally:
+    task.save()  # save data for plotting

@@ -46,7 +46,7 @@ class RealTimePlot:
 
     '''%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%'''
 
-    def setup_plots_1(self):
+    def setup_gravity(self):
         self.fig = plt.figure(figsize=(10, 12))
         gs = gridspec.GridSpec(2, 2)
         
@@ -72,7 +72,7 @@ class RealTimePlot:
         self.fig.canvas.flush_events()
 
         # Common settings for all axes
-        for ax, title in zip(self.axs,['Actual Motor Torque', 'Raw FTS Data', 'Estimate Joint Torque', 'Sensor Joint Torque']):
+        for ax, title in zip(self.axs,['Actual Motor Torque', 'Raw FTS Data in EE Frame', 'Estimate Joint Torque', 'Raw FTS Data in Base Frame']):
             ax.set_title(title, pad=10, fontsize=10)
             ax.grid(True, linestyle='--', alpha=0.7)
             ax.set_xlabel('Time (s)', fontsize=8)
@@ -80,20 +80,20 @@ class RealTimePlot:
         self.axs[0].set_ylabel('Actual Motor Torque (Nm)', fontsize=8)
         self.axs[1].set_ylabel('Raw FTS Data (N, Nm)', fontsize=8)
         self.axs[2].set_ylabel('Estimated Joint Torque by Controller (Nm)', fontsize=8)
-        self.axs[3].set_ylabel('Joint Torque Sensor Data (Nm)', fontsize=8)
+        self.axs[3].set_ylabel('Raw FTS Data (N, Nm)', fontsize=8)
 
         # Create lines with custom colors
         forces = ['Fx', 'Fy', 'Fz', 'Mx', 'My', 'Mz']
         self.motor_lines = [self.axs[0].plot([], [], label=f'Joint {i+1}', color=self.colors[i], linewidth=1.5)[0] for i in range(6)]
         self.fts_lines = [self.axs[1].plot([], [], label=f' {forces[i]}', color=self.colors[i], linewidth=1.5)[0] for i in range(6)]
         self.est_joint_lines = [self.axs[2].plot([], [], label=f'Joint {i+1}', color=self.colors[i], linewidth=1.5)[0] for i in range(6)]
-        self.sensor_joint_lines = [self.axs[3].plot([], [], label=f'Joint {i+1}', color=self.colors[i], linewidth=1.5)[0] for i in range(6)]
+        self.sensor_joint_lines = [self.axs[3].plot([], [], label=f' {forces[i]}', color=self.colors[i], linewidth=1.5)[0] for i in range(6)]
 
         # Add legends
         for ax in self.axs:
             ax.legend(loc='upper left', fontsize=8, ncol=2)
 
-    def update_data_1(self, actual_motor_torque, raw_force_torque, joint_torque_estimate, joint_torque_sensor):
+    def update_gravity(self, actual_motor_torque, raw_force_torque, joint_torque_estimate, joint_torque_sensor):
         current_time = time.time()
         
         # Limit update rate
@@ -121,7 +121,7 @@ class RealTimePlot:
             self.sensor_joint_lines[i].set_data(x_data, list(self.joint_torque_sensor[i]))
 
         # Update axis limits
-        limit = [70, 100, 100, 100]
+        limit = [150, 60, 150, 60]
         if len(x_data) > 0:
             for idx, ax in enumerate(self.axs):
                 ax.set_xlim(max(0, plot_time - 10), plot_time + 0.5)
@@ -137,6 +137,99 @@ class RealTimePlot:
         except Exception as e:
             rospy.logwarn(f"Error updating plot: {e}")
 
+    '''%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%'''
+
+    def setup_impedance(self):
+        self.fig = plt.figure(figsize=(10, 12))
+        gs = gridspec.GridSpec(2, 2)
+        
+        self.axs = []
+        self.axs.append(self.fig.add_subplot(gs[0,0]))
+        self.axs.append(self.fig.add_subplot(gs[1,0]))
+        self.axs.append(self.fig.add_subplot(gs[0,1]))
+        self.axs.append(self.fig.add_subplot(gs[1,1]))
+
+        plt.subplots_adjust(hspace=0.3)
+
+        # Initialize data storage
+        self.motor_torque = [deque(maxlen=self.max_points) for _ in range(6)]
+        self.row_ft_data = [deque(maxlen=self.max_points) for _ in range(6)]
+        self.joint_torque_estimate = [deque(maxlen=self.max_points) for _ in range(6)]        
+        self.impedance_force = [deque(maxlen=self.max_points) for _ in range(6)]   
+        
+        # Enable double buffering
+        self.fig.canvas.draw()
+
+        # Show the plot
+        plt.show(block=False)
+        self.fig.canvas.flush_events()
+
+        # Common settings for all axes
+        for ax, title in zip(self.axs,['Actual Motor Torque', 'Raw FTS Data in EE Frame', 'Estimate Joint Torque', 'Impedance Forces']):
+            ax.set_title(title, pad=10, fontsize=10)
+            ax.grid(True, linestyle='--', alpha=0.7)
+            ax.set_xlabel('Time (s)', fontsize=8)
+            
+        self.axs[0].set_ylabel('Actual Motor Torque (Nm)', fontsize=8)
+        self.axs[1].set_ylabel('Raw FTS Data (N, Nm)', fontsize=8)
+        self.axs[2].set_ylabel('Estimated Joint Torque by Controller (Nm)', fontsize=8)
+        self.axs[3].set_ylabel('Impedance Force = K*E + D*E_dot (N, Nm)', fontsize=8)
+
+        # Create lines with custom colors
+        forces = ['Fx', 'Fy', 'Fz', 'Mx', 'My', 'Mz']
+        self.motor_lines = [self.axs[0].plot([], [], label=f'Joint {i+1}', color=self.colors[i], linewidth=1.5)[0] for i in range(6)]
+        self.fts_lines = [self.axs[1].plot([], [], label=f' {forces[i]}', color=self.colors[i], linewidth=1.5)[0] for i in range(6)]
+        self.est_joint_lines = [self.axs[2].plot([], [], label=f'Joint {i+1}', color=self.colors[i], linewidth=1.5)[0] for i in range(6)]
+        self.imp_force_lines = [self.axs[3].plot([], [], label=f' {forces[i]}', color=self.colors[i], linewidth=1.5)[0] for i in range(6)]
+
+        # Add legends
+        for ax in self.axs:
+            ax.legend(loc='upper left', fontsize=8, ncol=2)
+
+    def update_imdepdance(self, actual_motor_torque, raw_force_torque, joint_torque_estimate, impedance_force):
+        current_time = time.time()
+        
+        # Limit update rate
+        if current_time - self.last_update_time < self.update_interval:
+            return
+            
+        plot_time = current_time - self.start_time
+        self.times.append(plot_time)
+        
+        # Update data
+        for i in range(6):
+            self.motor_torque[i].append(actual_motor_torque[i])
+            self.row_ft_data[i].append(raw_force_torque[i])
+            self.joint_torque_estimate[i].append(joint_torque_estimate[i])
+            self.impedance_force[i].append(impedance_force[i])
+
+        # Convert deques to lists for plotting
+        x_data = list(self.times)
+        
+        # Update all lines
+        for i in range(6):
+            self.motor_lines[i].set_data(x_data, list(self.motor_torque[i]))
+            self.fts_lines[i].set_data(x_data, list(self.row_ft_data[i]))
+            self.est_joint_lines[i].set_data(x_data, list(self.joint_torque_estimate[i]))
+            self.imp_force_lines[i].set_data(x_data, list(self.impedance_force[i]))
+
+        # Update axis limits
+        limit = [150, 60, 150, 60]
+        if len(x_data) > 0:
+            for idx, ax in enumerate(self.axs):
+                ax.set_xlim(max(0, plot_time - 10), plot_time + 0.5)
+                ax.set_ylim(-limit[idx], limit[idx])
+                ax.relim()
+                ax.autoscale_view(scaley=True)
+
+        try:
+            # Use blit for faster rendering
+            self.fig.canvas.draw_idle()
+            self.fig.canvas.flush_events()
+            self.last_update_time = current_time
+        except Exception as e:
+            rospy.logwarn(f"Error updating plot: {e}")
+            
     '''%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%'''
 
     def setup_task_plot(self):

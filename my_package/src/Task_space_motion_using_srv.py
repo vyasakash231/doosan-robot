@@ -89,7 +89,6 @@ if __name__ == "__main__":
 
     # Get get current Solution_space
     current_solution_space = rospy.ServiceProxy("/dsr01a0509/aux_control/get_current_solution_space", GetCurrentSolutionSpace)
-    print(current_solution_space().sol_space)
 
     # create ROS service_proxy
     """
@@ -111,19 +110,25 @@ if __name__ == "__main__":
     ---
     bool success
     """
+
     # rospy.wait_for_service('/dsr01a0509/motion/move_jointx')  # Wait until the service becomes available
-    # E_cc = [370, 670, 650, 0, 180, 0]
+    # # E_cc = [370, 670, 650, 0, 180, 0]
+    # sol_space = get_current_posx()[1]
+    # alpha, beta, gamma = get_current_posx()[0][3:]
+    # E_cc = [200, 0, 800, alpha, beta, gamma]
     # move_task = rospy.ServiceProxy("/dsr01a0509/motion/move_jointx", MoveJointx)
-    # move_task(E_cc, 30, 30, None, None, None, 0, 0, current_solution_space().sol_space, 0)
+    # move_task(E_cc, 30, 30, None, None, None, 0, 0, sol_space, 0)
 
     # Move in Line
     # E_cc = [370, 670, 650, 0, 180, 0]
     # E_cc=posx(367, 10, 540.5, 62.0, 180, 62.0)
-    # move_in_line = rospy.ServiceProxy("/dsr01a0509/motion/move_line", MoveLine)
-    # move_in_line(E_cc, [50, 50], [50, 50], 0, 0, 0, 0, 0, 0)
+    alpha, beta, gamma = get_current_posx()[0][3:]
+    E_cc = [200, 0, 800, alpha, beta, gamma]
+    move_in_line = rospy.ServiceProxy("/dsr01a0509/motion/move_line", MoveLine)
+    move_in_line(E_cc, [30,50], [30,50], 0, 0, 0, 0, 0, 0)
 
-    print(f"Joint_angles: {get_current_posj()}")
-    print(f"End-effector: {get_current_posx()}") # if we pass no referance, it will take referance as base coordinate
+    # print(f"Joint_angles: {get_current_posj()}")
+    # print(f"End-effector: {get_current_posx()}") # if we pass no referance, it will take referance as base coordinate
 
     rospy.spin()  # To stop the loop and program by pressing ctr + C
 

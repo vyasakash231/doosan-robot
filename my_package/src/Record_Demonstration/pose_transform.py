@@ -65,11 +65,45 @@ def mat2quat(rmat):
     inds = np.array([1, 2, 3, 0])
     return q1[inds]
 
+    # trace = M[0,0] + M[1,1] + M[2,2]
+    
+    # if trace > 0:
+    #     S = 2.0 * np.sqrt(trace + 1.0)
+    #     qw = 0.25 * S
+    #     qx = (M[2,1] - M[1,2]) / S
+    #     qy = (M[0,2] - M[2,0]) / S
+    #     qz = (M[1,0] - M[0,1]) / S
+    # elif M[0,0] > M[1,1] and M[0,0] > M[2,2]:
+    #     S = 2.0 * np.sqrt(1.0 + M[0,0] - M[1,1] - M[2,2])
+    #     qw = (M[2,1] - M[1,2]) / S
+    #     qx = 0.25 * S
+    #     qy = (M[0,1] + M[1,0]) / S
+    #     qz = (M[0,2] + M[2,0]) / S
+    # elif M[1,1] > M[2,2]:
+    #     S = 2.0 * np.sqrt(1.0 + M[1,1] - M[0,0] - M[2,2])
+    #     qw = (M[0,2] - M[2,0]) / S
+    #     qx = (M[0,1] + M[1,0]) / S
+    #     qy = 0.25 * S
+    #     qz = (M[1,2] + M[2,1]) / S
+    # else:
+    #     S = 2.0 * np.sqrt(1.0 + M[2,2] - M[0,0] - M[1,1])
+    #     qw = (M[1,0] - M[0,1]) / S
+    #     qx = (M[0,2] + M[2,0]) / S
+    #     qy = (M[1,2] + M[2,1]) / S
+    #     qz = 0.25 * S
+    #     return np.array([qx, qy, qz, qw])
+
 def eul2quat(euler_angles):
     rmat = euler2mat(euler_angles)
     M = np.asarray(rmat).astype(np.float32)
     q = mat2quat(M)
     return q.tolist()  # (x,y,z,w)
+
+def make_quat_continuity(quats):
+    for i in range(1, quats.shape[0]):
+        if np.dot(quats[i-1,:], quats[i,:]) < 0:  # Angle > 90 degrees
+            quats[i,:] = -quats[i,:]  # Flip to maintain continuity
+    return quats
 
 def quat2mat(quaternion):
     x, y, z, w = quaternion

@@ -69,8 +69,8 @@ class RT_STATE:
         self.actual_joint_velocity_abs = np.array(data.actual_joint_velocity_abs)
         self.actual_tcp_position = np.array(data.actual_tcp_position)
         self.actual_tcp_velocity = np.array(data.actual_tcp_velocity)
-        # self.actual_flange_position = data.actual_flange_position
-        # self.actual_flange_velocity = data.actual_flange_velocity
+        self.actual_flange_position = np.array(data.actual_flange_position)
+        self.actual_flange_velocity = np.array(data.actual_flange_velocity)
         self.actual_motor_torque = np.array(data.actual_motor_torque)
         self.actual_joint_torque = np.array(data.actual_joint_torque)
         self.raw_joint_torque = np.array(data.raw_joint_torque)

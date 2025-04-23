@@ -5,7 +5,7 @@ sys.dont_write_bytecode = True
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),"../")))
 
 from basic_import import *
-from common_utils import Robot, RealTimePlot
+from common_utils import Robot, RealTimePlot, Filters
 
 
 class GravityCompensation(Robot):
@@ -14,39 +14,34 @@ class GravityCompensation(Robot):
 
         # Initialize the plotter in the main thread
         self.plotter = RealTimePlot()
-        self.plotter.setup_plots_1()   # to plot torques
+        self.plotter.setup_gravity()   # to plot torques
         # self.plotter.setup_task_plot()   # to plot EE-velocities
 
         # Initial estimated frictional torque
         self.fric_torques = np.zeros(self.n)
 
-        self.J_m = np.diag([0.0004956, 0.0004956, 0.0001839, 0.00009901, 0.00009901, 0.00009901])
-        self.K_o = np.diag([0.1, 0.1, 0.2, 0.15, 0.25, 0.5])
+        # self.J_m = np.diag([0.0004956, 0.0004956, 0.0001839, 0.00009901, 0.00009901, 0.00009901])
+        self.Ko = np.diag([0.1, 0.05, 0.125, 0.05, 0.1, 0.2])
+
+        self.activate_tool_compensation = True
+
+        self.filter = Filters()
 
         super().__init__()
+    
+    @property
+    def external_wrench_in_base_frame(self):
+        """I have remove force-Fz due to EE-block whose weight is approx. 2.25Kg"""
+        m, g = 2.25, -9.81
+        Force_due_to_EE_weight = np.array([[0.0],[0.0],[m*g]])  # Fz = m x g = 2.25Kg x -9.81m/s^2
+        F_E_E = self.filter.low_pass_filter_torque(np.array(self.Robot_RT_State.raw_force_torque))   # Wrench in EE frame
 
-    def _svd_solve(self, M, threshold=1e-10):
-        U, s, V_transp = np.linalg.svd(M)
-
-        # Option-1
-        S_inv = np.diag(s**-1)
-        
-        # # Option-2, Handle small singular values
-        # s_inv = np.zeros_like(s)
-        # for i in range(len(s)):
-        #     if s[i] > threshold:
-        #         s_inv[i] = 1.0 / s[i]
-        #     else:
-        #         s_inv[i] = 0.0  # Or apply damping: s[i]/(s[i]^2 + lambda^2)
-        
-        # # Reconstruct inverse
-        # S_inv = np.zeros_like(M)
-        # for i in range(len(s)):
-        #     S_inv[i,i] = s_inv[i]
-        
-        # M^-1 = V * S^-1 * U^T
-        M_inv = V_transp.T @ S_inv @ U.T   # V = V_transp.T
-        return M_inv
+        EE_pose = np.array(self.Robot_RT_State.actual_tcp_position)   #  (x, y, z, a, b, c) in mm, deg
+        R_E_0 = self.euler2mat(EE_pose[3:])  # euler-angles in deg
+        F_E_0 = R_E_0 @ F_E_E[:3][:,np.newaxis] - Force_due_to_EE_weight 
+        M_E_0 = R_E_0 @ F_E_E[3:][:,np.newaxis] + np.cross(0.001*EE_pose[:3], F_E_0.reshape(-1))[:, np.newaxis]
+        ext_wrench = np.concatenate((F_E_0.reshape(-1), M_E_0.reshape(-1)))  # Wrench in Base frame
+        return ext_wrench
 
     @property
     def q_ddot(self):
@@ -56,19 +51,19 @@ class GravityCompensation(Robot):
         tau = self.Robot_RT_State.actual_joint_torque   # in Nm
 
         if abs(np.linalg.det(Mq)) >= 1e-4:
-            # Mq_inv = np.linalg.inv(Mq)
-            Mq_inv = self._svd_solve(Mq)
+            # Mq_inv = np.linalg.inv(Mq)   # very unstable
+            Mq_inv = self._svd_solve(Mq)   
         else:
             Mq_inv = np.linalg.pinv(Mq)
 
-        q_dot = 0.0174532925 * self.Robot_RT_State.actual_joint_velocity   # convert deg/s to rad/s
-        q_ddot = Mq_inv @ (tau[:, np.newaxis] - C @ q_dot[:, np.newaxis] - G[:, np.newaxis])
+        q_dot = 0.0174532925 * self.Robot_RT_State.actual_joint_velocity_abs   # convert deg/s to rad/s
+        q_ddot = Mq_inv @ (tau[:, np.newaxis] - self.fric_torques[:, np.newaxis] - C @ q_dot[:, np.newaxis] - G[:, np.newaxis])
         return q_ddot.reshape(-1)  # in rad/s^2
     
     @property
     def current_acceleration(self):
         q = 0.0174532925 * self.Robot_RT_State.actual_joint_position   # convert deg to rad
-        q_dot = 0.0174532925 * self.Robot_RT_State.actual_joint_velocity   # convert deg/s to rad/s
+        q_dot = 0.0174532925 * self.Robot_RT_State.actual_joint_velocity_abs   # convert deg/s to rad/s
         
         J,_,_ = self.kinematic_model.Jacobian(q)
         J_dot,_,_ = self.kinematic_model.Jacobian_dot(q, q_dot)
@@ -78,10 +73,18 @@ class GravityCompensation(Robot):
 
     def plot_data(self):
         try:
-            self.plotter.update_data_1(self.data.actual_motor_torque, 
+            J = self.Robot_RT_State.jacobian_matrix
+            external_wrench = self.external_wrench_in_base_frame
+            ext_torque = - J.T @ external_wrench[:, np.newaxis]
+
+            self.plotter.update_gravity(self.data.actual_motor_torque, 
                                        self.data.raw_force_torque, 
                                        self.data.actual_joint_torque, 
-                                       self.data.raw_joint_torque)  # external_tcp_force
+                                        # self.data.external_joint_torque, 
+                                    #    self.data.raw_joint_torque
+                                       external_wrench
+                                        # ext_torque.reshape(-1)
+                                       ) 
         except Exception as e:
             rospy.logwarn(f"Error adding plot data: {e}")
 
@@ -91,7 +94,7 @@ class GravityCompensation(Robot):
     #         # J = self.Robot_RT_State.jacobian_matrix
     #         q = 0.0174532925 * self.Robot_RT_State.actual_joint_position   # convert deg to rad
     #         J, _, _ = self.kinematic_model.Jacobian(q)
-    #         calc_vel = 0.0174532925 * (J @ self.Robot_RT_State.actual_joint_velocity[:, np.newaxis]).reshape(-1)
+    #         calc_vel = 0.0174532925 * (J @ self.Robot_RT_State.actual_joint_velocity_abs[:, np.newaxis]).reshape(-1)
 
     #         X_dot[:3] = 0.001 * self.Robot_RT_State.actual_tcp_velocity[:3]   # convert from mm/s to m/s
     #         X_dot[3:] = 0.0174532925 * self.Robot_RT_State.actual_tcp_velocity[3:]  # convert from deg/s to rad/s  
@@ -102,28 +105,36 @@ class GravityCompensation(Robot):
     def calc_friction_torque(self):
         motor_torque = self.Robot_RT_State.actual_motor_torque
         joint_torque = self.Robot_RT_State.actual_joint_torque
-        q_dot = 0.0174532925 * self.Robot_RT_State.actual_joint_velocity  # convert from deg/s to rad/s
+        q_dot = 0.0174532925 * self.Robot_RT_State.actual_joint_velocity_abs  # convert from deg/s to rad/s
 
-        term_1 = np.dot(self.K_o, (motor_torque - joint_torque - self.fric_torques)) * 0.001
-        term_2 = np.dot(self.K_o, np.dot(self.J_m, (self.q_dot_prev - q_dot)))
-        self.fric_torques = self.fric_torques + term_1 + term_2
+        term_1 = np.dot(self.Ko, (motor_torque - joint_torque - self.fric_torques)) * 0.005
+        self.fric_torques = self.fric_torques + term_1 
 
         self.q_dot_prev = q_dot.copy()
 
     def run_controller(self):
-        self.q_dot_prev = self.Robot_RT_State.actual_joint_velocity.copy() 
+        self.q_dot_prev = self.Robot_RT_State.actual_joint_velocity_abs.copy() 
         rate = rospy.Rate(self.write_rate)
         try:
             while not rospy.is_shutdown() and not self.shutdown_flag:
                 G_torques = self.Robot_RT_State.gravity_torque  # calculate gravitational torque in Nm
                 self.calc_friction_torque() #  estimate frictional torque in Nm
 
-                print(self.q_ddot)
-    
-                torque = G_torques #+ self.fric_torques
+                # position = self.Robot_RT_State.actual_tcp_position[:3].copy()    # (x, y, z) in mm
+                # orientation = self.eul2quat(self.Robot_RT_State.actual_tcp_position[3:].copy())  # Convert angles from Euler ZYZ (in degrees) to quaternion        
+
+                # q = 0.0174532925 * np.array(self.Robot_RT_State.actual_joint_position)   # convert from deg to rad
+                # pose,_,_ = self.kinematic_model.FK(q)
+                # print(position, orientation)
+                # print(pose)
+                # print("===========================================================")
+                
+                torque = G_torques + self.fric_torques 
                 writedata = TorqueRTStream()
                 writedata.tor = torque
                 writedata.time = 0.0
+
+                # print(get_tool_force())
                 
                 self.torque_publisher.publish(writedata)
                 rate.sleep()

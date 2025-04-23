@@ -10,6 +10,7 @@ import cv2 as cv
 from cv2 import aruco
 # import pyrealsense2 as rs
 import numpy as np
+import numpy.linalg as LA
 import quaternion
 np.set_printoptions(suppress=True)
 

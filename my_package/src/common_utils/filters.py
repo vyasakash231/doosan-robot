@@ -1,21 +1,17 @@
 import numpy as np
 
 class Filters:
-    def __init__(self, dt):
+    def __init__(self):
         # Initialize torque filtering variables
         self.prev_torque = None
         self.alpha = 0.5  # Filter coefficient (0.25 means 25% new, 75% previous)
 
         # Initialize moving average filter
-        self.window_size = 10.0
+        self.window_size = 5.0
         self.torque_history = []  # Changed from fixed-size list to empty list
 
-        # Initialize torque smoothing parameters
-        self.max_torque_rate = 25.0  # Maximum change in torque per second
-        self.dt = dt  # Control period
-
     def low_pass_filter_torque(self, new_torque):
-        """ Butterworth-like low pass filter for torque smoothing """
+        """ Butterworth-like low pass filter for signal smoothing """
         if self.prev_torque is None:
             self.prev_torque = new_torque
             return new_torque
@@ -46,23 +42,3 @@ class Filters:
             filtered_torque += weights[i] * self.torque_history[i]
         return filtered_torque
     
-    def smooth_torque(self, new_torque):
-        """ Safe torque smoothing using exponential filter and rate limiting """
-        if self.prev_torque is None:
-            self.prev_torque = new_torque
-            return new_torque
-            
-        # Calculate maximum allowed change in this timestep
-        max_change = self.max_torque_rate * self.dt
-        
-        # Rate limiting
-        torque_diff = new_torque - self.prev_torque
-        limited_diff = np.clip(torque_diff, -max_change, max_change)
-        rate_limited_torque = self.prev_torque + limited_diff
-        
-        # Exponential smoothing
-        smoothed_torque = (self.alpha * rate_limited_torque + (1 - self.alpha) * self.prev_torque)
-        
-        # Update previous torque
-        self.prev_torque = smoothed_torque
-        return smoothed_torque

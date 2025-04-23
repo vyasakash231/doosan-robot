@@ -12,8 +12,6 @@ class DoosanRecord:
     def __init__(self):
         rospy.init_node('manual_control_node')
         rospy.on_shutdown(self.shutdown)
-
-        self.rs = rospy.Rate(50)   # 50Hz = 20ms
         
         # Wait for essential services
         rospy.wait_for_service('/dsr01a0509/system/set_robot_mode')
@@ -26,8 +24,6 @@ class DoosanRecord:
         self.task_compliance_ctrl = rospy.ServiceProxy('/dsr01a0509/force/task_compliance_ctrl', TaskComplianceCtrl)
         self.set_stiffness = rospy.ServiceProxy('/dsr01a0509/force/set_stiffnessx', SetStiffnessx)
         self.release_compliance = rospy.ServiceProxy('/dsr01a0509/force/release_compliance_ctrl', ReleaseComplianceCtrl)
-
-        # self.goal_pub = rospy.Publisher('/equilibrium_pose', PoseStamped, queue_size=0)
         
         # Publishers
         self.stop_pub = rospy.Publisher('/dsr01a0509/stop', RobotStop, queue_size=10)
@@ -63,24 +59,14 @@ class DoosanRecord:
         self.current_position = 0.001 * np.array(msg.current_posx)[:3]   # (x, y, z), converted from mm to m
         self.current_euler = 0.0174532925 * np.array(msg.current_posx)[3:]   # (a, b, c) follows Euler ZYZ notation, convert from deg/s to rad/s
         self.current_quat = eul2quat(np.array(msg.current_posx)[3:])   # orientation in quaternion
-        self.current_vel = np.array(msg.current_velx)   # (x, y, z, a, b, c), where (a, b, c) follows Euler ZYZ notation [mm/s, deg/s]
+        self.current_linear_vel = 0.001 * np.array(msg.current_velx)[:3]   # (Vx, Vy, Vz), convert from mm/s to m/s
+        self.current_angular_vel = 0.0174532925 * np.array(msg.current_velx)[3:]   # (ωx, ωy, ωz), convert from deg/s to rad/s
 
-    # def pose_array_7x1(self, pos_array, quat):
-    #     pose_st = PoseStamped()
-    #     pose_st.pose.position.x = pos_array[0]
-    #     pose_st.pose.position.y = pos_array[1]
-    #     pose_st.pose.position.z = pos_array[2]
-    #     pose_st.pose.orientation.x = quat[0]
-    #     pose_st.pose.orientation.y = quat[1]
-    #     pose_st.pose.orientation.z = quat[2]
-    #     pose_st.pose.orientation.w = quat[3]
-    #     return pose_st
-
-    def traj_record(self, trigger=0.005):
+    def traj_record(self, trigger=0.005):  # trigger is 5mm
         # Default is [500, 500, 500, 100, 100, 100] -> Reducing these values will make the robot more compliant
-        # stiffness = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
-        # self.set_stiffness(stiffness, 0, 0.0) 
-        # rospy.loginfo("Stiffness set successfully")
+        stiffness = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+        self.set_stiffness(stiffness, 0, 0.0) 
+        rospy.loginfo("Stiffness set successfully")
 
         rospy.sleep(0.5)
 
@@ -91,6 +77,9 @@ class DoosanRecord:
         init_pose = self.current_position
         robot_perturbation = 0
         print("Move robot to start recording.")
+
+        # TO increase the amount of data collected, increase the frequency
+        rate = rospy.Rate(25)   # 25Hz = 40ms, 50Hz = 20ms
         
         # observe small movement to start recoding
         while robot_perturbation < trigger:
@@ -99,7 +88,8 @@ class DoosanRecord:
         self.recorded_q = self.q  # in rad
         self.recorded_trajectory = self.current_position  # in m
         self.recorded_orientation = self.current_quat  # quaternions
-        self.recorded_velocity = self.current_velocity  # [m/s, rad/s]
+        self.recorded_linear_velocity = self.current_linear_vel  # in m/s
+        self.recorded_angular_velocity = self.current_angular_vel  # in rad/s
         # self.recorded_gripper = self.gripper_open_width
    
         while self.button:  # if the cockpit button is pressed
@@ -113,10 +103,11 @@ class DoosanRecord:
             self.recorded_q = np.vstack((self.recorded_q, self.q))  # shape: (N, 6) 
             self.recorded_trajectory = np.vstack((self.recorded_trajectory, self.current_position))  # shape: (N, 3) 
             self.recorded_orientation = np.vstack((self.recorded_orientation, self.current_quat))  # shape: (N, 4)
-            self.recorded_velocity = np.vstack((self.recorded_velocity, self.current_velocity))  # shape: (N, 6)
+            self.recorded_linear_velocity = np.vstack((self.recorded_linear_velocity, self.current_linear_vel))  # shape: (N, 3)
+            self.recorded_angular_velocity = np.vstack((self.recorded_angular_velocity, self.current_angular_vel))  # shape: (N, 3)
             # self.recorded_gripper = np.vstack((self.recorded_gripper, self.grip_value))
-            
-            self.rs.sleep()
+
+            rate.sleep()
 
         # goal = np.concatenate((self.current_position, self.current_quat))
         rospy.loginfo("Ending trajectory recording")
@@ -138,7 +129,8 @@ class DoosanRecord:
                 q=self.recorded_q,
                 traj=self.recorded_trajectory,
                 ori=self.recorded_orientation,
-                vel=self.recorded_velocity,
+                vel=self.recorded_linear_velocity,
+                omega=self.recorded_angular_velocity
                 #  grip=self.recorded_gripper
                 )
 
@@ -148,10 +140,17 @@ class DoosanRecord:
         self.recorded_q=data['q'],
         self.recorded_trajectory = data['traj']
         self.recorded_orientation = data['ori']
-        self.recorded_velocity = data['vel']
+        self.recorded_linear_velocity = data['vel']
+        self.recorded_angular_velocity = data['omega']
         # self.recorded_gripper = data['grip']
 
 if __name__ == "__main__":
+    # move to initial position first
+    p1= posj(0,0,90,0,90,0)  # posj(q1, q2, q3, q4, q5, q6) This function designates the joint space angle in degrees
+    movej(p1, vel=40, acc=20)
+    
+    time.sleep(1.0)
+
     try:
         controller = DoosanRecord()
         rospy.loginfo("Robot setup complete - Ready for manual demonstration")

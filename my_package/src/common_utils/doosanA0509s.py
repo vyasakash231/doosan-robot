@@ -33,12 +33,14 @@ class Robot(ABC):
         # Real-time data Publisher --> rospy.Publisher(topic_name, message_type, queue_size)
         self.speedj_publisher = rospy.Publisher('/dsr01a0509/speedj_rt_stream', SpeedJRTStream, queue_size=10)    # SpeedJRTStream -> Topic message that controls the joint velocity from an external controller.
         self.speedl_publisher = rospy.Publisher('/dsr01a0509/servoj_rt_stream', ServoJRTStream, queue_size=10)    # ServoJRTStream -> Topic message that controls the joint position from an external controller.   
-        self.torque_publisher = rospy.Publisher('/dsr01a0509/torque_rt_stream', TorqueRTStream, queue_size=10)    # TorqueRTStream -> Topic message that controls the motor torque from an external controller.
+        
+        # For 3 kHz data, 100ms would be about 300 messages
+        self.torque_publisher = rospy.Publisher('/dsr01a0509/torque_rt_stream', TorqueRTStream, queue_size=300)    # TorqueRTStream -> Topic message that controls the motor torque from an external controller.
 
         self.RT_observer_client = rospy.ServiceProxy('/dsr01a0509/realtime/read_data_rt', ReadDataRT)    # This function reads the real-time output data from the robot controller.
 
-        self.read_rate = 3000 # in Hz (0.333 ms)
-        self.write_rate = 1000 # in Hz (1 ms)
+        self.read_rate = 3000  # in Hz (0.333 ms)
+        self.write_rate = 1000  # in Hz (1 ms)
 
         self.client_thread_ = Thread(target=self.read_data_rt_client)
         self.client_thread_.daemon = True  # Make thread daemon so it exits when main thread exits
@@ -187,6 +189,29 @@ class Robot(ABC):
     def plot_data(self):
         pass  
 
+    def _svd_solve(self, A):
+        U, s, V_transp = np.linalg.svd(A)
+
+        # Option-1
+        S_inv = np.diag(s**-1)
+        
+        # Option-2, Handle small singular values
+        # s_inv = np.zeros_like(s)
+        # for i in range(len(s)):
+        #     if s[i] > threshold:
+        #         s_inv[i] = 1.0 / s[i]
+        #     else:
+        #         s_inv[i] = 0.0  # Or apply damping: s[i]/(s[i]^2 + lambda^2)
+        
+        # # Reconstruct inverse
+        # S_inv = np.zeros_like(M)
+        # for i in range(len(s)):
+        #     S_inv[i,i] = s_inv[i]
+
+        # A^-1 = V * S^-1 * U^T
+        A_inv = V_transp.T @ S_inv @ U.T   # V = V_transp.T
+        return A_inv
+
     def euler2mat(self, euler_angles):  # euler_angles in degrees
         """
         Convert Euler ZYZ rotation angles to a 3D rotation matrix.
@@ -268,3 +293,75 @@ class Robot(ABC):
         q = self.mat2quat(M)
         return q
     
+    def unit_vector(self, data, axis=None, out=None):
+        """
+        Returns ndarray normalized by length, i.e. eucledian norm, along axis.
+
+        Args:
+            data (np.array): data to normalize
+            axis (None or int): If specified, determines specific axis along data to normalize
+            out (None or np.array): If specified, will store computation in this variable
+
+        Returns:
+            None or np.array: If @out is not specified, will return normalized vector. Otherwise, stores the output in @out
+        """
+        if out is None:
+            data = np.array(data, dtype=np.float32, copy=True)
+            if data.ndim == 1:
+                data /= sqrt(np.dot(data, data))
+                return data
+        else:
+            if out is not data:
+                out[:] = np.array(data, copy=False)
+            data = out
+        length = np.atleast_1d(np.sum(data * data, axis))
+        np.sqrt(length, length)
+        if axis is not None:
+            length = np.expand_dims(length, axis)
+        data /= length
+        if out is None:
+            return data
+    
+    def quat_slerp(self, quat0, quat1, fraction, shortestpath=True):
+        """
+        Return spherical linear interpolation between two quaternions.
+
+        Args:
+            quat0 (np.array): (x,y,z,w) quaternion startpoint
+            quat1 (np.array): (x,y,z,w) quaternion endpoint
+            fraction (float): fraction of interpolation to calculate
+            shortestpath (bool): If True, will calculate the shortest path
+
+        Returns:
+            np.array: (x,y,z,w) quaternion distance
+        """
+        EPS = np.finfo(float).eps * 4.0
+        
+        q0 = unit_vector(quat0[:4])
+        q1 = unit_vector(quat1[:4])
+        
+        if fraction == 0.0:
+            return q0
+        elif fraction == 1.0:
+            return q1
+        
+        d = np.dot(q0, q1)
+        
+        if abs(abs(d) - 1.0) < EPS:
+            return q0
+        
+        if shortestpath and d < 0.0:
+            # invert rotation
+            d = -d
+            q1 *= -1.0
+        angle = acos(np.clip(d, -1, 1))
+        
+        if abs(angle) < EPS:
+            return q0
+        
+        isin = 1.0 / sin(angle)
+        q0 *= sin((1.0 - fraction) * angle) * isin
+        q1 *= sin(fraction * angle) * isin
+        q0 += q1
+        return q0
+        
