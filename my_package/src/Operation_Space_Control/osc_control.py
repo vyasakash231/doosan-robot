@@ -14,14 +14,12 @@ class OSC(Robot):
 
         # Initialize the plotter in the main thread
         self.plotter = RealTimePlot()
-        self.plotter.setup_plots_1()
+        # self.plotter.setup_plots_1()
 
-        self.Kp = np.diag([45.0, 45.0, 45.0, 20.0, 20.0, 20.0])
-        # self.Kv = np.diag([50.0, 50.0, 50.0, 25.0, 25.0, 25.0])
-        self.Kv = 1.25 * np.sqrt(self.Kp)
+        self.Kp = np.diag([50.0, 50.0, 50.0, 15.0, 15.0, 15.0])
+        self.Kv = 1.5 * np.sqrt(self.Kp)
 
-        self.Jm = np.diag([0.0004956, 0.0004956, 0.0001839, 0.00009901, 0.00009901, 0.00009901])
-        self.Ko = np.diag([0.1, 0.1, 0.2, 0.15, 0.25, 0.5])
+        self.Ko = np.diag([0.08, 0.08, 0.08, 0.08, 0.08, 0.08])
 
         # Current robot state variables
         self.tau_J_d = np.zeros(6)  # Previous desired torque
@@ -34,23 +32,10 @@ class OSC(Robot):
 
         super().__init__()
 
-        # time.sleep(0.5)
-
-        # # Set Global Joint Velocity Limits
-        # self.max_vel = [50, 20]
-        # request = SetVelXRTRequest()
-        # request.trans = self.max_vel[0]  #  in mm/s
-        # request.rotation = self.max_vel[1]  # in deg/s
-        # self.ee_vel_limits(request)
-
-        # # Set Global Task Velocity Limits
-        # request = SetVelJRTRequest()
-        # request.vel = [60, 60, 60, 60, 60, 60]  # in deg/s
-        # self.joint_vel_limits(request)
-
     def plot_data(self):
         try:
-            self.plotter.update_data_1(self.data.actual_motor_torque, self.data.raw_force_torque, self.data.actual_joint_torque, self.data.raw_joint_torque)
+            # self.plotter.update_data_1(self.data.actual_motor_torque, self.data.raw_force_torque, self.data.actual_joint_torque, self.data.raw_joint_torque)
+            pass
         except Exception as e:
             rospy.logwarn(f"Error adding plot data: {e}")
 
@@ -58,16 +43,19 @@ class OSC(Robot):
         # Set equilibrium point to current state
         self.position_des = position   # (x, y, z) in mm
         self.orientation_des = self.eul2quat(self.Robot_RT_State.actual_tcp_position[3:].copy())  # Convert angles from Euler ZYZ (in degrees) to quaternion  
-        self.velocity_des = velocity  # [Vx, Vy, Vz, ωx, ωy, ωz] in [m/s, rad/s]
-        self.q_dot_prev = 0.0174532925 * self.Robot_RT_State.actual_joint_velocity.copy()   # convert from deg/s to rad/s
+        self.velocity_des = velocity   # [Vx, Vy, Vz, ωx, ωy, ωz] in [m/s, rad/s]
 
     @property
     def velocity_current(self):
-        EE_dot = self.Robot_RT_State.actual_tcp_velocity   # [Vx, Vy, Vz, ωx, ωy, ωz]
-        X_dot = np.zeros(6)
-        X_dot[:3] = 0.001 * EE_dot[:3]   # convert from mm/s to m/s
-        X_dot[3:] = 0.0174532925 * EE_dot[3:]  # convert from deg/s to rad/s  
-        return X_dot
+        # EE_dot = self.Robot_RT_State.actual_tcp_velocity   # [Vx, Vy, Vz, ωx, ωy, ωz]
+        # X_dot = np.zeros(6)
+        # X_dot[:3] = 0.001 * EE_dot[:3]   # convert from mm/s to m/s
+        # X_dot[3:] = 0.0174532925 * EE_dot[3:]  # convert from deg/s to rad/s  
+        # return X_dot
+
+        self.q_dot = 0.0174532925 * self.Robot_RT_State.actual_joint_velocity_abs  # convert from deg/s to rad/s
+        X_dot = self.J @ self.q_dot[:,np.newaxis]
+        return X_dot.reshape(-1)
     
     @property
     def position_error(self):
@@ -114,52 +102,29 @@ class OSC(Robot):
             tau = tau.reshape(-1)
 
         # First limit rate of change as in your original function
-        tau_rate_limited = np.zeros(self.n)
-        for i in range(self.n):
-            difference = tau[i] - tau_J_d[i]
-            tau_rate_limited[i] = tau_J_d[i] + np.clip(difference, -self.delta_tau_max, self.delta_tau_max)
-        tau = tau_rate_limited.copy()
+        # tau_rate_limited = np.zeros(self.n)
+        # for i in range(self.n):
+        #     difference = tau[i] - tau_J_d[i]
+        #     tau_rate_limited[i] = tau_J_d[i] + np.clip(difference, -self.delta_tau_max, self.delta_tau_max)
+        # tau = tau_rate_limited.copy()
 
         # Now apply peak torque limits based on Doosan A0509 specs
-        limit_factor = 0.9
+        limit_factor = 0.95
         max_torque_limits = limit_factor * np.array([190.0, 190.0, 190.0, 40.0, 40.0, 40.0])  # Nm
+
+        if tau.ndim == 2:
+            tau = tau.reshape(-1)
 
         # Clip torque values to stay within limits (both positive and negative)
         tau_saturated = np.clip(tau, -max_torque_limits, max_torque_limits)
         return tau_saturated
-    
-    # def _limit_vel(self, delX):
-    #     scale = np.ones(6)
-    #     lamb = np.array(self.Kp[0,0] * 3 + self.Ko[0,0] * 3) / self.Kv[0,0]
-        
-    #     # Apply the sat gains to the x,y,z components
-    #     norm_xyz = np.linalg.norm(delX[:3])
-    #     sat_gain_xyz = self.max_vel[0] / self.Kp * self.Kv
-    #     scale_xyz = self.max_vel[0] / self.Kp * self.Kv
-        
-    #     if norm_xyz > sat_gain_xyz:
-    #         scale[:3] *= scale_xyz / norm_xyz
-        
-    #     # Apply the sat gains to the a,b,g components
-    #     norm_abg = np.linalg.norm(delX[3:])
-    #     sat_gain_abg = self.max_vel[1] / self.Ko * self.Kv
-    #     scale_abg = self.max_vel[1] / self.Ko * self.Kv
-        
-    #     if norm_abg > sat_gain_abg:
-    #         scale[3:] *= scale_abg / norm_abg
-    #     delX = self.Kv * scale * lamb * delX
-    #     return delX
 
     def calc_friction_torque(self):
         motor_torque = self.Robot_RT_State.actual_motor_torque   # in Nm
         joint_torque = self.Robot_RT_State.actual_joint_torque   # in Nm
-        q_dot = 0.0174532925 * self.Robot_RT_State.actual_joint_velocity   # convert from deg/s to rad/s
 
-        term_1 = np.dot(self.Ko, (motor_torque - joint_torque - self.tau_f)) * 0.001
-        term_2 = np.dot(self.Ko, np.dot(self.Jm, (self.q_dot_prev - q_dot)))
-        self.tau_f = self.tau_f + term_1 + term_2
-
-        self.q_dot_prev = q_dot.copy()
+        term_1 = np.dot(self.Ko, (motor_torque - joint_torque - self.tau_f)) * 0.005
+        self.tau_f = self.tau_f + term_1
 
     def control_input(self):
         # define EE-Position & Orientation error in task-space
@@ -176,6 +141,7 @@ class OSC(Robot):
     def run_controller(self, position, velocity):
         self.start(position, velocity)
         tau_task = np.zeros((self.n,1))
+
         rate = rospy.Rate(self.write_rate)  # 1000 Hz control rate
         
         try:
@@ -192,8 +158,8 @@ class OSC(Robot):
 
                 if np.all(self.velocity_des == 0.0):
                     # if there's no desired velocity in task space, compensate for velocity in joint space 
-                    q_dot = 0.0174532925 * self.Robot_RT_State.actual_joint_velocity   # convert from deg/s to rad/s
-                    tau_task = - Mq @ q_dot[:,np.newaxis] - J.T @ (Mx @ U)
+                    q_dot = 0.0174532925 * self.Robot_RT_State.actual_joint_velocity_abs   # convert from deg/s to rad/s
+                    tau_task = - Mq @ (self.Kv @ q_dot[:,np.newaxis]) - J.T @ (Mx @ U)
                 else:
                     tau_task = - J.T @ (Mx @ U)
 
@@ -204,7 +170,7 @@ class OSC(Robot):
                 self.calc_friction_torque()
             
                 # Compute desired torque
-                tau_d = G_torque[:, np.newaxis] + tau_task #+ self.tau_f[:, np.newaxis]
+                tau_d = G_torque[:, np.newaxis] + tau_task + self.tau_f[:, np.newaxis]
 
                 # Saturate torque to avoid limit breach
                 tau_d = self.saturate_torque(tau_d, self.tau_J_d)
@@ -215,6 +181,8 @@ class OSC(Robot):
                 self.torque_publisher.publish(writedata)
 
                 self.tau_J_d = tau_d.copy()
+
+                print(self.Robot_RT_State.actual_tcp_position[:3])
 
                 rate.sleep()
                 
@@ -234,7 +202,7 @@ if __name__ == "__main__":
         rospy.sleep(2.0)  # Give time for initialization
 
         # Start controller in a separate thread
-        Xd = np.array([200, 0, 800])  # in mm
+        Xd = np.array([200, 0, 750])  # in mm
         Xd_dot = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])   # in [m/s, rad/s]
         controller_thread = Thread(target=task.run_controller, args=(Xd, Xd_dot)) 
         controller_thread.daemon = True
