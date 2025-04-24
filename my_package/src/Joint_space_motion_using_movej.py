@@ -71,8 +71,11 @@ if __name__ == "__main__":
     #my_subscriber_1 = rospy.Subscriber('/dsr01a0509/joint_states', JointState, call_back_func_1)  # In radian
     my_subscriber_2 = rospy.Subscriber('/dsr01a0509/state', RobotState, call_back_func_3)  # In degrees
 
-    p1= posj(0,25,110,0,45,0)  # posj(q1, q2, q3, q4, q5, q6) This function designates the joint space angle in degrees
+    p1= posj(0,0,90,0,90,0)  # posj(q1, q2, q3, q4, q5, q6) This function designates the joint space angle in degrees
     movej(p1, vel=40, acc=20)
+
+    # p1= posj(0,25,110,0,45,0)  # posj(q1, q2, q3, q4, q5, q6) This function designates the joint space angle in degrees
+    # movej(p1, vel=40, acc=20)
 
     # p1= posj(-20,-10,70,0,50,30)  # posj(q1, q2, q3, q4, q5, q6) This function designates the joint space angle in degrees
     # movej(p1, vel=40, acc=20)

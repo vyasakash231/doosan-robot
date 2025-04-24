@@ -12,8 +12,11 @@ class Robot_KM:
         self.d_nn = d_nn
         self.DH_params = DH_params
 
-        # off-set in joint angles
+        # Difference btw Hardware/Gazebo & DH convention
         self.offset = np.array([0.0, -np.pi/2, np.pi/2, 0.0, 0.0, 0.0])
+
+        # Joint limit
+        self.q_limit = np.radians(np.array([[-360,360],[-95,95],[-135,135],[-360,360],[-135,135],[-360,360]]))
 
         # base transform to account for robot's reference frame
         self.T_base = np.array([

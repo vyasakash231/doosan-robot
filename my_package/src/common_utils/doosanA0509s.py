@@ -185,7 +185,7 @@ class Robot(ABC):
                     rospy.logwarn(f"Service call failed: {e}") 
             rate.sleep()
 
-    @abstractmethod   # Force child classes to implement this method
+    #@abstractmethod   # Force child classes to implement this method
     def plot_data(self):
         pass  
 
