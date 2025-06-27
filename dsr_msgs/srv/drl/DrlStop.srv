@@ -5,7 +5,6 @@
 # STOP_TYPE_SLOW      = 2
 # STOP_TYPE_HOLD = STOP_TYPE_EMERGENCY = 3  
 #____________________________________________________________________________________________
-
 int8    stop_mode       # <STOP_TYPE> stop_mode       
 ---
 bool    success

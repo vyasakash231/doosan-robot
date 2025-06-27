@@ -12,8 +12,6 @@
 # 1: SAFETY_MODE_EVENT_MOVE
 # 2: SAFETY_MODE_EVENT_STOP
 # 3: SAFETY_MODE_EVENT_LAST
-__________________________________________________________________________
-
 int8 safety_mode  
 int8 safety_mode_event
 ---

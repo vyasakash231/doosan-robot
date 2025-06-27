@@ -2,7 +2,6 @@
 # speedj_rt
 # 
 #____________________________________________________________________________________________
-
 float64[6] vel               # Joint velocity
 float64[6] acc               # Joint acceleration
 float64    time              # time

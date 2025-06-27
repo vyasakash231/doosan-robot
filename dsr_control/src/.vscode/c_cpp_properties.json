@@ -1,0 +1,24 @@
+{
+  "configurations": [
+    {
+      "browse": {
+        "databaseFilename": "${default}",
+        "limitSymbolsToIncludedHeaders": false
+      },
+      "includePath": [
+        "/opt/ros/noetic/include/**",
+        "/home/lab230/doosan_ws/src/doosan-robot/common/include/**",
+        "/home/lab230/doosan_ws/src/doosan-robot/dsr_control/include/**",
+        "/home/lab230/doosan_ws/src/doosan-robot/dsr_example/realtime_control/include/**",
+        "/home/lab230/doosan_ws/src/serial/include/**",
+        "/usr/include/**"
+      ],
+      "name": "ROS",
+      "intelliSenseMode": "gcc-x64",
+      "compilerPath": "/usr/bin/gcc",
+      "cStandard": "gnu11",
+      "cppStandard": "c++14"
+    }
+  ],
+  "version": 4
+}

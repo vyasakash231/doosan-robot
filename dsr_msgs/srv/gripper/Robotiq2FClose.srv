@@ -2,7 +2,6 @@
 # robotiq_2f_close
 # close the virtual robotiq gripper  
 #____________________________________________________________________________________________
-
 # None     
 ---
 bool success

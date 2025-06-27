@@ -7,7 +7,6 @@
 # 3 : DRL_PROGRAM_STATE_LAST
 # drfl.GetProgramState()
 #____________________________________________________________________________________________
-
 ---
 int8        drl_state # <DRL_PROGRAM_STATE>
 bool        success

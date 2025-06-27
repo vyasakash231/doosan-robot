@@ -2,7 +2,6 @@
 # calc_coord   
 #____________________________________________________________________________________________
 # This service is only available in M2.50 or later
-
 int8       input_pos_cnt     # input_pos_cnt
 float64[6] x1                # task pos(posx)  
 float64[6] x2                # task pos(posx)  

@@ -2075,6 +2075,7 @@ namespace dsr_control{
     #endif
 
         LPROBOT_TASK_POSE cur_posx = Drfl.get_current_posx((COORDINATE_SYSTEM)req.ref);
+
         arr.data.clear();
         for (int i = 0; i < NUM_TASK; i++){
             arr.data.push_back(cur_posx->_fTargetPos[i]);

@@ -3,7 +3,6 @@
 # send byte data to other device 
 # you can operate the real-robotiq gripper by modbus rtu
 #____________________________________________________________________________________________
-
 string data
 ---
 bool success

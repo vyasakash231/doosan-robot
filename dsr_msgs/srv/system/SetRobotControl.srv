@@ -1,7 +1,6 @@
 #____________________________________________________________________________________________
 # set_robot_control
 #____________________________________________________________________________________________
-
 int8 robot_control # 0 : CONTROL_INIT_CONFIG
                    # 1 : CONTROL_ENABLE_OPERATION
                    # 2 : CONTROL_RESET_SAFET_STOP
@@ -16,4 +15,3 @@ int8 robot_control # 0 : CONTROL_INIT_CONFIG
                    # 11: CONTROL_LAST
 ---
 bool success    
-                   

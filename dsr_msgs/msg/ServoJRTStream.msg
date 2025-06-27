@@ -2,7 +2,6 @@
 # servoj_rt
 # 
 #____________________________________________________________________________________________
-
 float64[6] pos               # position  
 float64[6] vel               # velocity
 float64[6] acc               # acceleration

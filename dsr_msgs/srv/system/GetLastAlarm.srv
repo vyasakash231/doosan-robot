@@ -2,7 +2,6 @@
 # get_last_alarm
 ###Struct.LOG_ARARM
 #____________________________________________________________________________________________
-
 ---
 LogAlarm log_alarm
 bool        success

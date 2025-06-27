@@ -2,7 +2,6 @@
 # servol
 # 
 #____________________________________________________________________________________________
-
 float64[6] pos               # position  
 float64[2] vel               # velocity
 float64[2] acc               # acceleration

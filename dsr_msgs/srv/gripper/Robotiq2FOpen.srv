@@ -2,7 +2,6 @@
 # robotiq_2f_open
 # open the virtual robotiq gripper  
 #____________________________________________________________________________________________
-
 # None  
 ---
 bool success

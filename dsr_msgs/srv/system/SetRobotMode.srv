@@ -7,7 +7,6 @@
 # 3 : ROBOT_MODE_BACKDRIVE
 # drfl.SetRobotMode()
 #____________________________________________________________________________________________
-
 int8 robot_mode # <Robot_Mode>
 ---
 bool success

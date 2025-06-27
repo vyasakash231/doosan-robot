@@ -1,7 +1,6 @@
 #____________________________________________________________________________________________
 # check_orientation_condition(axis, min, max, ref, mod, pos)  
 #____________________________________________________________________________________________
-
 int8       axis              # DR_AXIS_A(10), DR_AXIS_B(11), DR_AXIS_C(12) 
 float64    min               # minimum value  
 float64    max               # maximum value  

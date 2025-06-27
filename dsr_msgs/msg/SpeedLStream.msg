@@ -2,7 +2,6 @@
 # speedl
 # 
 #____________________________________________________________________________________________
-
 float64[6] vel               # velocity
 float64[2] acc               # acceleration
 float64    time              # time

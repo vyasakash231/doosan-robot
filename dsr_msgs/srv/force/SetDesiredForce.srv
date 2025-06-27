@@ -1,7 +1,6 @@
 #____________________________________________________________________________________________
 # set_desired_force  
 #____________________________________________________________________________________________
-
 float64[6] fd                # Three translational target forces + Three rotational target moments
 int8[6]    dir               # Force control in the corresponding direction if 1, Compliance control in the corresponding direction if 0
 int8       ref               # Reference coordinate of the coordinate to get

@@ -4,7 +4,6 @@
 #This condition can be repeated with the while or if statement. Measuring the force, axis is based on the ref coordinate and measuring the moment,
 #axis is based on the tool coordinate.
 #____________________________________________________________________________________________
-
 int8       axis              # DR_AXIS_X(0), DR_AXIS_Y(1), DR_AXIS_Z(2), DR_AXIS_A(10), DR_AXIS_B(11), DR_AXIS_C(12) 
 float64    min               # min >=0.0   
 float64    max               # max >=0.0 

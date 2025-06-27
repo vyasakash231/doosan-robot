@@ -9,7 +9,8 @@
 	<arg name="color" default="color"/>
     <arg name="gripper" default="none"/>
 	<arg name="mobile" default="none"/>
-    <arg name="yaml" default="dsr_control"/>
+    <!--arg name="yaml" default="dsr_control"/-->
+    <arg name="yaml" default="A0509S_control"/>
     <arg name="moveit" default="false"/>
     <!--use moveit : controller=:trajectory / else: controller:=position-->
     <arg name="controller" default="position"/>
